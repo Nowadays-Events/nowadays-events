@@ -23,7 +23,7 @@ android {
         buildConfigField(
             "String",
             "NOWADAYS_API_BASE_URL",
-            "\"${providers.gradleProperty("nowadaysApiBaseUrl").orElse("http://127.0.0.1:8765").get()}\"",
+            "\"${providers.gradleProperty("nowadaysApiBaseUrl").orElse("https://nowadays-events.github.io").get()}\"",
         )
     }
 
