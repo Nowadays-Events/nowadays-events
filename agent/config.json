@@ -1,0 +1,25 @@
+{
+  "center": {
+    "name": "Mont-de-Marsan",
+    "latitude": 43.8904,
+    "longitude": -0.5007
+  },
+  "radius_km": 50,
+  "sources": [
+    {
+      "name": "Mont de Marsan Tourisme",
+      "url": "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/",
+      "max_detail_pages": 30
+    },
+    {
+      "name": "Ville de Saint-Sever",
+      "url": "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas",
+      "max_detail_pages": 30
+    },
+    {
+      "name": "Landes d'Armagnac Tourisme",
+      "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/agenda-sur-le-territoire-de-larmagnac/",
+      "max_detail_pages": 30
+    }
+  ]
+}

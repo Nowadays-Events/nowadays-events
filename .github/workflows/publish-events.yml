@@ -1,0 +1,67 @@
+name: Collect and publish events
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - ".github/workflows/publish-events.yml"
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: nowadays-events-pages
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Run tests
+        run: python -m unittest discover -s agent -p "test_*.py" -v
+
+      - name: Collect events
+        run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180
+
+      - name: Build public feed
+        run: |
+          mkdir -p _site
+          cp agent/output/events.json _site/events.json
+          cp agent/output/events.json _site/events
+          printf '{"status":"ok"}\n' > _site/health.json
+          printf '<!doctype html><html lang="fr"><meta charset="utf-8"><title>Nowadays Events API</title><body><h1>Nowadays Events API</h1><p><a href="events.json">Flux JSON des événements</a></p></body></html>\n' > _site/index.html
+          touch _site/.nojekyll
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: collect
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
