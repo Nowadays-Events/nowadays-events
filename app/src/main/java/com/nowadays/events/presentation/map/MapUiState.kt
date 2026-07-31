@@ -4,11 +4,13 @@ import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.AttendanceResponse
 import com.nowadays.events.domain.model.TimeFilter
 import java.time.LocalDate
+import java.time.Instant
 
 data class MapUiState(
     val selectedFilter: TimeFilter = TimeFilter.TODAY,
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
+    val dataUpdatedAt: Instant? = null,
     val events: List<Event> = emptyList(),
     val selectedEvent: Event? = null,
     val relatedEvents: List<Event> = emptyList(),

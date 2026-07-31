@@ -60,6 +60,7 @@ class MapViewModel @Inject constructor(
             selectedFilter = filter,
             customStartDate = customRange?.first,
             customEndDate = customRange?.second,
+            dataUpdatedAt = events.maxOfOrNull(Event::updatedAt),
             events = visible,
             selectedEvent = selected,
             relatedEvents = related,
@@ -79,6 +80,7 @@ class MapViewModel @Inject constructor(
 
     fun selectFilter(filter: TimeFilter) {
         selectedFilter.value = filter
+        expandedMainEventId.value = null
         selectedEventId.value = null
         expandedClusterEventIds.value = emptySet()
     }

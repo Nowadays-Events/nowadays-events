@@ -161,9 +161,6 @@ class EventMapController(
                 pendingEvents, pendingMainEventIds, pendingChildEventIds, pendingChildCounts,
             ).features().orEmpty()
                 .associateBy { it.getStringProperty(EventGeoJsonMapper.EVENT_ID_PROPERTY) }
-            renderedEventPoints = regularFeatures.mapNotNull { (id, feature) ->
-                (feature.geometry() as? Point)?.let { id to it }
-            }.toMap()
             pendingChildCounts.values.filter { it > 0 }.toSet().forEach { count ->
                 style.addImage("main-child-count-$count", createBadgeBitmap(count))
             }
@@ -184,6 +181,9 @@ class EventMapController(
             if (pendingExpandedMainEvent != null || mapLibreMap.cameraPosition.zoom >= INDIVIDUAL_MARKERS_ZOOM) {
                 clusterMembers = emptyMap()
                 renderedClusterPoints = emptyMap()
+                renderedEventPoints = regularFeatures.mapNotNull { (id, feature) ->
+                    (feature.geometry() as? Point)?.let { id to it }
+                }.toMap()
                 source.setGeoJson(FeatureCollection.fromFeatures(regularFeatures.values.map(::markAsEvent)))
                 return@getStyle
             }
@@ -215,7 +215,13 @@ class EventMapController(
             clusterCounts.forEach { count -> style.addImage(clusterIconId(count), createClusterBitmap(count)) }
             clusterMembers = members
             renderedClusterPoints = clusterPoints
-            source.setGeoJson(FeatureCollection.fromFeatures(features + forcedFeatures))
+            val visibleFeatures = features + forcedFeatures
+            renderedEventPoints = visibleFeatures.mapNotNull { feature ->
+                if (!feature.hasProperty(EventGeoJsonMapper.EVENT_ID_PROPERTY)) return@mapNotNull null
+                val id = feature.getStringProperty(EventGeoJsonMapper.EVENT_ID_PROPERTY)
+                (feature.geometry() as? Point)?.let { id to it }
+            }.toMap()
+            source.setGeoJson(FeatureCollection.fromFeatures(visibleFeatures))
         }
     }
 
@@ -424,8 +430,7 @@ class EventMapController(
 
     private fun installClickHandling(mapLibreMap: MapLibreMap) {
         mapLibreMap.addOnMapClickListener { coordinate ->
-            val screenPoint = mapLibreMap.projection.toScreenLocation(coordinate)
-            val clusterKey = nearestPointId(mapLibreMap, coordinate, renderedClusterPoints)
+            val clusterKey = nearestPointId(mapLibreMap, coordinate, renderedClusterPoints, CLUSTER_HIT_RADIUS_PIXELS)
             if (clusterKey != null) {
                 val members = clusterMembers[clusterKey].orEmpty()
                 if (members.isNotEmpty()) {
@@ -451,18 +456,19 @@ class EventMapController(
     private fun nearestEventId(
         mapLibreMap: MapLibreMap,
         tap: LatLng,
-    ): String? = nearestPointId(mapLibreMap, tap, renderedEventPoints)
+    ): String? = nearestPointId(mapLibreMap, tap, renderedEventPoints, EVENT_HIT_RADIUS_PIXELS)
 
     private fun nearestPointId(
         mapLibreMap: MapLibreMap,
         tap: LatLng,
         points: Map<String, Point>,
+        hitRadiusPixels: Float,
     ): String? {
         return MapHitResolver.nearest(
             tap = GeoPoint(tap.latitude, tap.longitude),
             zoom = mapLibreMap.cameraPosition.zoom,
             points = points.mapValues { (_, point) -> GeoPoint(point.latitude(), point.longitude()) },
-            hitRadiusPixels = GEOMETRIC_HIT_RADIUS_PIXELS,
+            hitRadiusPixels = hitRadiusPixels,
         )
     }
 
@@ -483,7 +489,8 @@ class EventMapController(
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
         private const val CLUSTER_DISTANCE_PIXELS = 88f
         private const val INDIVIDUAL_MARKERS_ZOOM = 15.0
-        private const val GEOMETRIC_HIT_RADIUS_PIXELS = 180f
+        private const val EVENT_HIT_RADIUS_PIXELS = 54f
+        private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5
         private val DEFAULT_CENTER = LatLng(48.8566, 2.3522)
     }

@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -47,6 +46,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +62,7 @@ import org.maplibre.android.geometry.LatLng
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,7 +113,6 @@ fun MapScreen(
         }
     }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
                 FloatingActionButton(onClick = {
@@ -139,13 +140,30 @@ fun MapScreen(
                 controller = controller,
                 modifier = Modifier.fillMaxSize(),
             )
+            Column(
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 6.dp),
+            ) {
+                val mapTextShadow = Shadow(color = MaterialTheme.colorScheme.surface, offset = Offset(1f, 1f), blurRadius = 5f)
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleSmall.copy(shadow = mapTextShadow),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                state.dataUpdatedAt?.let { updatedAt ->
+                    Text(
+                        "Actualisé le ${updatedAt.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))}",
+                        style = MaterialTheme.typography.labelSmall.copy(shadow = mapTextShadow),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
             FilterBar(
                 selected = state.selectedFilter,
                 customStartDate = state.customStartDate,
                 customEndDate = state.customEndDate,
                 onSelected = viewModel::selectFilter,
                 onCalendarClick = { showCalendar = true },
-                modifier = Modifier.align(Alignment.TopCenter),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 44.dp),
             )
             if (state.isExploringGroup) {
                 val transition = rememberInfiniteTransition(label = "group back pulse")
