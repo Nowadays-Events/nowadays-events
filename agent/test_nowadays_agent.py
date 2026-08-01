@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_feed, extract_events, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_events, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -49,6 +49,17 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertIsNotNone(event)
         self.assertEqual("2026-08-05T07:30:00+00:00", event.start_at)
         self.assertEqual("Source validée", event.source_name)
+
+    def test_candidate_queue_never_promotes_unreviewed_items(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "candidates.json"
+            count = export_candidates({"candidate_events": [
+                {"name": "Annonce sociale", "url": "https://social.example/post"},
+            ]}, output, "2026-08-02T10:00:00+00:00")
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(1, count)
+            self.assertEqual("incomplete", payload["candidates"][0]["review_status"])
+            self.assertIn("startDate", payload["candidates"][0]["missing_fields"])
 
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """

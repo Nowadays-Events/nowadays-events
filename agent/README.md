@@ -67,3 +67,24 @@ déduplication que les sources automatiques. La source originale doit toujours
 
 Le fichier public `health.json` indique désormais `degraded` et détaille les
 sources en échec, au lieu d’afficher systématiquement un état sain.
+
+## Architecture des sources
+
+Chaque source déclare maintenant son `type`, sa `priority` et son niveau de
+confiance `trust`. Les sources officielles sont traitées avant les sources
+secondaires lorsque la collecte approche de sa limite de temps.
+
+Ordre d’intégration retenu :
+
+1. offices de tourisme, collectivités et organisateurs officiels ;
+2. flux structurés JSON-LD, API, RSS ou calendriers ICS ;
+3. plateformes événementielles disposant d’un accès autorisé ;
+4. publications sociales transformées en candidats, jamais publiées directement.
+
+Les annonces sociales et autres informations incertaines vont dans
+`candidate_events`. Le workflow les publie séparément dans `candidates.json`
+avec l’état `pending` ou `incomplete`. Seul le déplacement explicite d’une fiche
+validée vers `curated_events` permet sa publication dans l’application.
+
+`health.json` contient également un bilan par source : priorité, confiance,
+nombre de fiches trouvées, nombre retenu dans le rayon et nombre d’échecs.

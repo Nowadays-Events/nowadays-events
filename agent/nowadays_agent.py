@@ -344,6 +344,26 @@ def export_feed(connection: sqlite3.Connection, output: Path) -> int:
     return len(payload)
 
 
+def export_candidates(config: dict[str, Any], output: Path, now: str) -> int:
+    """Exporte une file séparée qui ne peut jamais alimenter l'application directement."""
+    candidates = []
+    required = ("name", "startDate", "url")
+    for item in config.get("candidate_events", []):
+        missing = [field for field in required if not str(item.get(field) or "").strip()]
+        candidates.append({
+            **item,
+            "review_status": "incomplete" if missing else "pending",
+            "missing_fields": missing,
+        })
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({
+        "generated_at": now,
+        "count": len(candidates),
+        "candidates": candidates,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(candidates)
+
+
 def run(
     config_path: Path,
     database_path: Path,
@@ -357,12 +377,21 @@ def run(
     collected: list[Event] = []
     failures: list[str] = []
     deadline = time.monotonic() + max_runtime_seconds
-    for source in config["sources"]:
+    source_reports: list[dict[str, Any]] = []
+    sources = sorted(config["sources"], key=lambda item: int(item.get("priority", 0)), reverse=True)
+    for source in sources:
+        source_failure_count = 0
+        source_candidate_count = 0
+        source_accepted_count = 0
+        source_reachable = False
         if time.monotonic() >= deadline:
             failures.append("Durée maximale atteinte avant la fin des sources")
             break
         try:
+            if source.get("type", "jsonld") != "jsonld":
+                raise ValueError(f"type de source non pris en charge: {source.get('type')}")
             body = fetch(source["url"], timeout=min(20, max(1, int(deadline - time.monotonic()))))
+            source_reachable = True
             candidates = extract_events(body, source["name"], source["url"])
             page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
             for detail_url in detail_links(body, source["url"], page_limit):
@@ -373,13 +402,27 @@ def run(
                     timeout = min(20, max(1, int(deadline - time.monotonic())))
                     candidates.extend(extract_events(fetch(detail_url, timeout=timeout), source["name"], detail_url))
                 except Exception as error:
+                    source_failure_count += 1
                     failures.append(f"{source['name']} ({detail_url}): {error}")
-            collected.extend(
-                event for event in candidates
-                if distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius
-            )
+            source_candidate_count = len(candidates)
+            accepted = [event for event in candidates
+                if distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius]
+            source_accepted_count = len(accepted)
+            collected.extend(accepted)
         except Exception as error:  # une source en panne ne bloque pas les autres
+            source_failure_count += 1
             failures.append(f"{source['name']}: {error}")
+        source_reports.append({
+            "name": source["name"],
+            "type": source.get("type", "jsonld"),
+            "priority": int(source.get("priority", 0)),
+            "trust": source.get("trust", "unknown"),
+            "reachable": source_reachable,
+            "candidates": source_candidate_count,
+            "accepted_in_radius": source_accepted_count,
+            "failures": source_failure_count,
+            "status": "ok" if source_failure_count == 0 else "degraded",
+        })
     for curated in config.get("curated_events", []):
         event = event_from_curated(curated)
         if event and distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius:
@@ -390,11 +433,14 @@ def run(
         connection.executescript(SCHEMA)
         inserted, updated = persist(connection, collected, now)
         exported = export_feed(connection, output_path)
+    pending_candidates = export_candidates(config, output_path.with_name("candidates.json"), now)
     report = {
         "status": "ok" if not failures else "degraded",
         "generated_at": now,
         "sources": len(config["sources"]),
+        "source_reports": source_reports,
         "curated_events": len(config.get("curated_events", [])),
+        "pending_candidates": pending_candidates,
         "fetched_events": len(collected),
         "inserted": inserted,
         "updated": updated,
@@ -405,7 +451,7 @@ def run(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
     )
     print(json.dumps(report, ensure_ascii=False))
-    return 0 if len(failures) < len(config["sources"]) else 2
+    return 0 if any(item["reachable"] for item in source_reports) or bool(config.get("curated_events")) else 2
 
 
 def main() -> int:
