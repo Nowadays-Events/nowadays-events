@@ -55,4 +55,15 @@ adb reverse tcp:8765 tcp:8765
 - l’agent respecte les données déjà collectées et nécessite une validation
   humaine pour les correspondances ambiguës ;
 - les conditions d’utilisation, quotas et règles d’exploration de chaque
-  source restent à valider avant un déploiement permanent.
+source restent à valider avant un déploiement permanent.
+
+## Fiches validées manuellement
+
+Les pages protégées contre les robots et les événements repérés sur les réseaux
+sociaux peuvent être ajoutés dans `curated_events` de `config.json`. Ils utilisent
+le format `schema.org/Event`, passent par le même filtre de rayon et la même
+déduplication que les sources automatiques. La source originale doit toujours
+être conservée dans `url` et la date vérifiée avant publication.
+
+Le fichier public `health.json` indique désormais `degraded` et détaille les
+sources en échec, au lieu d’afficher systématiquement un état sain.

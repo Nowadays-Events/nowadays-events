@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, export_feed, extract_events, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_feed, extract_events, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -32,6 +32,23 @@ class NowadaysAgentTests(unittest.TestCase):
     def test_distance_filter(self):
         self.assertLess(distance_km(43.8904, -0.5007, 43.758, -0.572), 50)
         self.assertGreater(distance_km(43.8904, -0.5007, 48.8566, 2.3522), 50)
+
+    def test_builds_validated_curated_event(self):
+        event = event_from_curated({
+            "@type": "Event",
+            "name": "Une matinée pêche",
+            "startDate": "2026-08-05T09:30:00+02:00",
+            "endDate": "2026-08-05T12:00:00+02:00",
+            "url": "https://example.org/peche",
+            "source_name": "Source validée",
+            "location": {
+                "name": "Grenade-sur-l’Adour",
+                "geo": {"latitude": 43.773106, "longitude": -0.431053},
+            },
+        })
+        self.assertIsNotNone(event)
+        self.assertEqual("2026-08-05T07:30:00+00:00", event.start_at)
+        self.assertEqual("Source validée", event.source_name)
 
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """

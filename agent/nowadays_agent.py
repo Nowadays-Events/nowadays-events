@@ -195,6 +195,15 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     )
 
 
+def event_from_curated(node: dict[str, Any]) -> Event | None:
+    """Convertit une fiche validée manuellement avec le même contrat schema.org."""
+    return event_from_json(
+        node,
+        str(node.get("source_name") or "Source validée"),
+        str(node.get("url") or ""),
+    )
+
+
 def extract_events(body: str, source_name: str, page_url: str) -> list[Event]:
     parser = JsonLdParser()
     parser.feed(body)
@@ -371,20 +380,31 @@ def run(
             )
         except Exception as error:  # une source en panne ne bloque pas les autres
             failures.append(f"{source['name']}: {error}")
+    for curated in config.get("curated_events", []):
+        event = event_from_curated(curated)
+        if event and distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius:
+            collected.append(event)
     database_path.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(database_path) as connection:
         connection.executescript(SCHEMA)
         inserted, updated = persist(connection, collected, now)
         exported = export_feed(connection, output_path)
-    print(json.dumps({
+    report = {
+        "status": "ok" if not failures else "degraded",
+        "generated_at": now,
         "sources": len(config["sources"]),
+        "curated_events": len(config.get("curated_events", [])),
         "fetched_events": len(collected),
         "inserted": inserted,
         "updated": updated,
         "exported": exported,
         "failures": failures,
-    }, ensure_ascii=False))
+    }
+    output_path.with_name("health.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
+    print(json.dumps(report, ensure_ascii=False))
     return 0 if len(failures) < len(config["sources"]) else 2
 
 

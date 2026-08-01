@@ -21,5 +21,30 @@
       "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/agenda-sur-le-territoire-de-larmagnac/",
       "max_detail_pages": 30
     }
+  ],
+  "curated_events": [
+    {
+      "@type": "Event",
+      "name": "Une matinée pêche",
+      "description": "Venez passer une matinée au bord de l’eau. L’AAPPMA prête le matériel, fournit les appâts et accompagne les participants avec ses conseils.",
+      "startDate": "2026-08-05T09:30:00+02:00",
+      "endDate": "2026-08-05T12:00:00+02:00",
+      "eventStatus": "https://schema.org/EventScheduled",
+      "url": "https://www.tourismelandes.com/agenda/une-matinee-peche-fmaaqu040v514aae/",
+      "source_name": "Tourisme Landes — fiche validée",
+      "location": {
+        "@type": "Place",
+        "name": "Grenade-sur-l’Adour",
+        "address": {
+          "postalCode": "40270",
+          "addressLocality": "Grenade-sur-l’Adour",
+          "addressCountry": "France"
+        },
+        "geo": {
+          "latitude": 43.773106,
+          "longitude": -0.431053
+        }
+      }
+    }
   ]
 }

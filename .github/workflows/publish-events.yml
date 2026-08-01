@@ -44,7 +44,7 @@ jobs:
           mkdir -p _site
           cp agent/output/events.json _site/events.json
           cp agent/output/events.json _site/events
-          printf '{"status":"ok"}\n' > _site/health.json
+          cp agent/output/health.json _site/health.json
           printf '<!doctype html><html lang="fr"><meta charset="utf-8"><title>Nowadays Events API</title><body><h1>Nowadays Events API</h1><p><a href="events.json">Flux JSON des événements</a></p></body></html>\n' > _site/index.html
           touch _site/.nojekyll
 
