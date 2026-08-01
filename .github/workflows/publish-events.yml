@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pages: write
   id-token: write
 
@@ -48,6 +49,11 @@ jobs:
           cp agent/output/candidates.json _site/candidates.json
           printf '<!doctype html><html lang="fr"><meta charset="utf-8"><title>Nowadays Events API</title><body><h1>Nowadays Events API</h1><p><a href="events.json">Flux JSON des événements</a></p></body></html>\n' > _site/index.html
           touch _site/.nojekyll
+
+      - name: Notify administrator about candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python agent/manage_reviews.py --candidates agent/output/candidates.json
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

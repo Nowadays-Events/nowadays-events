@@ -1,0 +1,85 @@
+name: Process administrator event review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      github.actor == github.repository_owner &&
+      startsWith(github.event.issue.title, '[Validation événement]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read administrator command
+        id: command
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          command = os.environ["COMMENT_BODY"].strip().splitlines()[0].strip().lower()
+          supported = {"/valider": "approve", "/refuser": "reject", "/corriger": "correct"}
+          value = supported.get(command, "ignore")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"value={value}\n")
+          Path("issue-body.txt").write_text(os.environ["ISSUE_BODY"], encoding="utf-8")
+
+      - name: Validate candidate
+        if: steps.command.outputs.value == 'approve'
+        run: python agent/review_candidate.py --config agent/config.json --issue-body-file issue-body.txt
+
+      - name: Create validation pull request
+        if: steps.command.outputs.value == 'approve'
+        id: pull_request
+        shell: bash
+        run: |
+          branch="review/event-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
+          git config user.name "Nowadays Events Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add agent/config.json
+          git commit -m "Validate proposed event #${ISSUE_NUMBER}"
+          git push origin "$branch"
+          url=$(gh pr create --title "Valider l'événement #${ISSUE_NUMBER}" --body "Validation demandée par l'administrateur. Ferme #${ISSUE_NUMBER}." --base main --head "$branch")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Mark approved
+        if: steps.command.outputs.value == 'approve'
+        shell: bash
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "à vérifier" --add-label "validé"
+          gh issue comment "$ISSUE_NUMBER" --body "Validation enregistrée. Pull Request : ${{ steps.pull_request.outputs.url }}"
+
+      - name: Reject candidate
+        if: steps.command.outputs.value == 'reject'
+        shell: bash
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "à vérifier" --add-label "refusé"
+          gh issue close "$ISSUE_NUMBER" --comment "Proposition refusée par l'administrateur."
+
+      - name: Request corrections
+        if: steps.command.outputs.value == 'correct'
+        shell: bash
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "à vérifier" --add-label "à corriger"
+          gh issue comment "$ISSUE_NUMBER" --body "Correction demandée. Ajoutez les indications dans votre réponse ; l'événement reste hors publication."
+
+      - name: Explain unsupported reply
+        if: steps.command.outputs.value == 'ignore'
+        shell: bash
+        run: gh issue comment "$ISSUE_NUMBER" --body "Commande non reconnue. Répondez par \`/valider\`, \`/refuser\` ou \`/corriger\`."

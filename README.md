@@ -19,6 +19,25 @@ Le Gradle Wrapper 8.13 est inclus. La dernière certification produit 6 tests r�
 Le détail des décisions, du modèle de données, des filtres, du clustering et des coûts se trouve dans [ANALYSE_MVP.md](ANALYSE_MVP.md).
 Le guide d’intégration d’une nouvelle source se trouve dans [docs/ADDING_EVENT_SOURCE.md](docs/ADDING_EVENT_SOURCE.md).
 
+### Validation administrateur
+
+Les candidats incertains restent dans `candidates.json` et ne sont jamais publiés
+automatiquement. La collecte ouvre une issue GitHub assignée au propriétaire du dépôt,
+avec les labels `à vérifier`, `validé`, `refusé` et `à corriger`. Une réponse à la
+notification GitHub contenant `/valider`, `/refuser` ou `/corriger` déclenche le
+traitement correspondant. Seul le propriétaire du dépôt est autorisé à déclencher ce
+workflow. Une validation crée une Pull Request contrôlable avant publication.
+
+Pour recevoir ces demandes à une adresse précise, cette adresse doit être vérifiée dans
+GitHub (`Settings > Emails`), puis choisie comme adresse par défaut dans
+`Settings > Notifications`. Aucun mot de passe Outlook ni serveur SMTP n’est stocké
+dans le dépôt.
+
+Une annulation explicitement signalée par une source officielle est détectée avec le
+statut `cancelled` et n’est pas importée par l’application. La suppression d’une ancienne
+copie déjà mise en cache sur un téléphone nécessite encore la future synchronisation
+du cycle de vie des événements.
+
 Packages préparés : `presentation`, `domain`, `data`, `local`, `remote`, `map` et `sync`. Ils seront peuplés progressivement sans créer de modules Gradle prématurés.
 
 Au premier lancement, Room reçoit automatiquement 30 événements fictifs calculés relativement à la date courante. Les événements couvrent aujourd’hui, la semaine, le week-end et des dates futures, avec plusieurs points aux mêmes coordonnées.
