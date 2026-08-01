@@ -17,6 +17,11 @@
       "max_detail_pages": 30
     },
     {
+      "name": "Tourisme Landes — tout l’agenda",
+      "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/",
+      "max_detail_pages": 30
+    },
+    {
       "name": "Landes d'Armagnac Tourisme",
       "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/agenda-sur-le-territoire-de-larmagnac/",
       "max_detail_pages": 30
