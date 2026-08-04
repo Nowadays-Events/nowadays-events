@@ -78,6 +78,10 @@ class EventMapController(
         mapLibreMap.cameraPosition = CameraPosition.Builder().target(initialCenter).zoom(initialZoom).build()
         mapLibreMap.addOnCameraIdleListener {
             mapLibreMap.cameraPosition.target?.let { onCameraChanged(it, mapLibreMap.cameraPosition.zoom) }
+            if (mapLibreMap.cameraPosition.zoom < CLUSTER_REFORM_ZOOM && expandedClusterEventIds.isNotEmpty()) {
+                expandedClusterEventIds = emptySet()
+                onClusterExpanded(emptySet())
+            }
             refreshSource()
         }
         mapLibreMap.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
@@ -142,6 +146,15 @@ class EventMapController(
 
     fun recenter(target: LatLng = DEFAULT_CENTER, zoom: Double = DEFAULT_ZOOM) {
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(target, zoom), 500)
+    }
+
+    fun focus(event: Event) {
+        val mapLibreMap = map ?: return
+        val targetZoom = (mapLibreMap.cameraPosition.zoom + 0.7).coerceIn(13.0, 15.5)
+        mapLibreMap.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(LatLng(event.latitude, event.longitude), targetZoom),
+            420,
+        )
     }
 
     fun frame(events: List<Event>) {
@@ -310,8 +323,10 @@ class EventMapController(
         val alpha = priority.alpha
         val radius = priority.radius
         val isLongRunning = MapMarkerPolicy.isLongRunning(event)
+        val isRecurring = MapMarkerPolicy.isRecurring(event)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = when {
+                isRecurring -> Color.rgb(0, 121, 107)
                 isLongRunning -> Color.rgb(0, 150, 136)
                 isChild -> Color.rgb(90, 150, 210)
                 isMain -> Color.rgb(103, 80, 164)
@@ -343,12 +358,14 @@ class EventMapController(
         if (isMain) {
             val center = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
             canvas.drawCircle(width / 2f, 34f, 6f, center)
+        } else if (isRecurring) {
+            drawRecurringGlyph(canvas, width / 2f, 34f)
         } else if (isLongRunning) {
             drawDurationGlyph(canvas, width / 2f, 34f)
         } else {
             drawCategoryGlyph(canvas, event, width / 2f, 34f)
         }
-        val date = event.startsAt.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM"))
+        val date = MapMarkerPolicy.displayDate(event).format(DateTimeFormatter.ofPattern("dd/MM"))
         val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.rgb(35, 35, 45)
             textAlign = Paint.Align.CENTER
@@ -411,6 +428,22 @@ class EventMapController(
         val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         canvas.drawCircle(x - 5f, y + 3f, 2f, dot)
         canvas.drawCircle(x + 5f, y + 3f, 2f, dot)
+    }
+
+    private fun drawRecurringGlyph(canvas: Canvas, x: Float, y: Float) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 3.2f
+            strokeCap = Paint.Cap.ROUND
+        }
+        canvas.drawArc(RectF(x - 12f, y - 11f, x + 12f, y + 11f), 35f, 270f, false, paint)
+        val arrow = Path().apply {
+            moveTo(x + 10f, y - 9f)
+            lineTo(x + 13f, y - 2f)
+            lineTo(x + 5f, y - 3f)
+        }
+        canvas.drawPath(arrow, Paint(paint).apply { style = Paint.Style.FILL })
     }
 
     private fun updateHierarchyLines(style: Style, regularFeatures: Map<String, Feature>) {
@@ -487,8 +520,9 @@ class EventMapController(
         private const val POINT_COUNT_PROPERTY = "point_count"
         private const val CLUSTER_KEY_PROPERTY = "cluster_key"
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
-        private const val CLUSTER_DISTANCE_PIXELS = 88f
+        private const val CLUSTER_DISTANCE_PIXELS = 104f
         private const val INDIVIDUAL_MARKERS_ZOOM = 15.0
+        private const val CLUSTER_REFORM_ZOOM = 14.4
         private const val EVENT_HIT_RADIUS_PIXELS = 54f
         private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5

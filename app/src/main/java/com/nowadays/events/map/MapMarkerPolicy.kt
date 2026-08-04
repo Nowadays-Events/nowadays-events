@@ -9,9 +9,23 @@ internal data class MarkerPriority(val alpha: Int, val radius: Float)
 
 internal object MapMarkerPolicy {
     private const val LONG_RUNNING_SECONDS = 36 * 60 * 60
+    private const val RECURRING_SECONDS = 14 * 24 * 60 * 60
 
     fun isLongRunning(event: Event): Boolean =
         event.endsAt.epochSecond - event.startsAt.epochSecond >= LONG_RUNNING_SECONDS
+
+    fun isRecurring(event: Event): Boolean =
+        event.endsAt.epochSecond - event.startsAt.epochSecond >= RECURRING_SECONDS
+
+    fun displayDate(
+        event: Event,
+        today: LocalDate = LocalDate.now(),
+        zoneId: ZoneId = ZoneId.systemDefault(),
+    ): LocalDate {
+        val start = event.startsAt.atZone(zoneId).toLocalDate()
+        val end = event.endsAt.atZone(zoneId).toLocalDate()
+        return if (isRecurring(event) && today in start..end) today else start
+    }
 
     fun priority(
         event: Event,
