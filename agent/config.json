@@ -7,6 +7,34 @@
   "radius_km": 50,
   "sources": [
     {
+      "name": "OpenAgenda — événements géolocalisés",
+      "type": "openagenda",
+      "priority": 90,
+      "trust": "platform",
+      "url": "https://api.openagenda.com/v2/events",
+      "api_key_env": "OPENAGENDA_API_KEY",
+      "radius_km": 50,
+      "page_size": 100
+    },
+    {
+      "name": "HelloAsso — annuaire événements",
+      "type": "helloasso",
+      "priority": 85,
+      "trust": "platform",
+      "client_id_env": "HELLOASSO_CLIENT_ID",
+      "client_secret_env": "HELLOASSO_CLIENT_SECRET",
+      "departments": ["Landes", "Gers"],
+      "horizon_days": 180
+    },
+    {
+      "name": "Eventbrite — organisations autorisées",
+      "type": "eventbrite",
+      "priority": 80,
+      "trust": "platform",
+      "token_env": "EVENTBRITE_PRIVATE_TOKEN",
+      "organizations_env": "EVENTBRITE_ORGANIZATION_IDS"
+    },
+    {
       "name": "Mont de Marsan Tourisme",
       "type": "jsonld",
       "priority": 100,

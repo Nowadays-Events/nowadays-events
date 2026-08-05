@@ -38,6 +38,12 @@ jobs:
         run: python -m unittest discover -s agent -p "test_*.py" -v
 
       - name: Collect events
+        env:
+          OPENAGENDA_API_KEY: ${{ secrets.OPENAGENDA_API_KEY }}
+          HELLOASSO_CLIENT_ID: ${{ secrets.HELLOASSO_CLIENT_ID }}
+          HELLOASSO_CLIENT_SECRET: ${{ secrets.HELLOASSO_CLIENT_SECRET }}
+          EVENTBRITE_PRIVATE_TOKEN: ${{ secrets.EVENTBRITE_PRIVATE_TOKEN }}
+          EVENTBRITE_ORGANIZATION_IDS: ${{ secrets.EVENTBRITE_ORGANIZATION_IDS }}
         run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180
 
       - name: Build public feed

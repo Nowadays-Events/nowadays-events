@@ -27,6 +27,8 @@ from typing import Any, Iterable
 from urllib.parse import urlsplit, urlunsplit
 from urllib.parse import urljoin
 
+from provider_sources import MissingCredentials, collect_api_source
+
 USER_AGENT = "NowadaysEventAgent/0.1 (+local prototype)"
 CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled", "reporté", "reporte")
 
@@ -384,33 +386,43 @@ def run(
         source_candidate_count = 0
         source_accepted_count = 0
         source_reachable = False
+        source_status = "ok"
         if time.monotonic() >= deadline:
             failures.append("Durée maximale atteinte avant la fin des sources")
             break
         try:
-            if source.get("type", "jsonld") != "jsonld":
-                raise ValueError(f"type de source non pris en charge: {source.get('type')}")
-            body = fetch(source["url"], timeout=min(20, max(1, int(deadline - time.monotonic()))))
+            source_type = source.get("type", "jsonld")
+            timeout = min(20, max(1, int(deadline - time.monotonic())))
+            if source_type == "jsonld":
+                body = fetch(source["url"], timeout=timeout)
+                candidates = extract_events(body, source["name"], source["url"])
+                page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
+                for detail_url in detail_links(body, source["url"], page_limit):
+                    if time.monotonic() >= deadline:
+                        failures.append(f"{source['name']}: durée maximale atteinte")
+                        break
+                    try:
+                        timeout = min(20, max(1, int(deadline - time.monotonic())))
+                        candidates.extend(extract_events(fetch(detail_url, timeout=timeout), source["name"], detail_url))
+                    except Exception as error:
+                        source_failure_count += 1
+                        failures.append(f"{source['name']} ({detail_url}): {error}")
+            else:
+                nodes = collect_api_source(source, center, timeout)
+                candidates = [event for node in nodes if (event := event_from_json(node, source["name"], node.get("url", "")))]
             source_reachable = True
-            candidates = extract_events(body, source["name"], source["url"])
-            page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
-            for detail_url in detail_links(body, source["url"], page_limit):
-                if time.monotonic() >= deadline:
-                    failures.append(f"{source['name']}: durée maximale atteinte")
-                    break
-                try:
-                    timeout = min(20, max(1, int(deadline - time.monotonic())))
-                    candidates.extend(extract_events(fetch(detail_url, timeout=timeout), source["name"], detail_url))
-                except Exception as error:
-                    source_failure_count += 1
-                    failures.append(f"{source['name']} ({detail_url}): {error}")
             source_candidate_count = len(candidates)
             accepted = [event for event in candidates
                 if distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius]
             source_accepted_count = len(accepted)
             collected.extend(accepted)
+        except MissingCredentials as error:
+            source_status = "credentials_missing"
+            # Connecteur optionnel encore non configuré : visible dans le rapport,
+            # mais il ne dégrade pas les sources déjà opérationnelles.
         except Exception as error:  # une source en panne ne bloque pas les autres
             source_failure_count += 1
+            source_status = "degraded"
             failures.append(f"{source['name']}: {error}")
         source_reports.append({
             "name": source["name"],
@@ -421,7 +433,7 @@ def run(
             "candidates": source_candidate_count,
             "accepted_in_radius": source_accepted_count,
             "failures": source_failure_count,
-            "status": "ok" if source_failure_count == 0 else "degraded",
+            "status": source_status if source_failure_count == 0 else "degraded",
         })
     for curated in config.get("curated_events", []):
         event = event_from_curated(curated)
