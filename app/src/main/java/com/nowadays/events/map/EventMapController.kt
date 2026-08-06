@@ -71,6 +71,8 @@ class EventMapController(
     private var expandedClusterEventIds: Set<String> = emptySet()
     private var renderedEventPoints: Map<String, Point> = emptyMap()
     private var renderedClusterPoints: Map<String, Point> = emptyMap()
+    private var clusterExpansionZoom: Double? = null
+    private var awaitingClusterFrame = false
 
     fun attach(mapLibreMap: MapLibreMap) {
         map = mapLibreMap
@@ -79,8 +81,15 @@ class EventMapController(
         mapLibreMap.cameraPosition = CameraPosition.Builder().target(initialCenter).zoom(initialZoom).build()
         mapLibreMap.addOnCameraIdleListener {
             mapLibreMap.cameraPosition.target?.let { onCameraChanged(it, mapLibreMap.cameraPosition.zoom) }
-            if (mapLibreMap.cameraPosition.zoom < CLUSTER_REFORM_ZOOM && expandedClusterEventIds.isNotEmpty()) {
+            if (awaitingClusterFrame && expandedClusterEventIds.isNotEmpty()) {
+                clusterExpansionZoom = mapLibreMap.cameraPosition.zoom
+                awaitingClusterFrame = false
+            } else if (
+                expandedClusterEventIds.isNotEmpty() &&
+                ClusterZoomPolicy.shouldCollapse(clusterExpansionZoom, mapLibreMap.cameraPosition.zoom)
+            ) {
                 expandedClusterEventIds = emptySet()
+                clusterExpansionZoom = null
                 onClusterExpanded(emptySet())
             }
             refreshSource()
@@ -142,6 +151,10 @@ class EventMapController(
         pendingChildCounts = childCounts
         pendingExpandedMainEvent = expandedMainEvent
         expandedClusterEventIds = expandedClusterIds.intersect(events.map(Event::id).toSet())
+        if (expandedClusterEventIds.isEmpty()) {
+            clusterExpansionZoom = null
+            awaitingClusterFrame = false
+        }
         refreshSource()
     }
 
@@ -512,6 +525,7 @@ class EventMapController(
                 val members = clusterMembers[clusterKey].orEmpty()
                 if (members.isNotEmpty()) {
                     expandedClusterEventIds = members.map(Event::id).toSet()
+                    awaitingClusterFrame = true
                     onClusterExpanded(expandedClusterEventIds)
                     refreshSource()
                     frame(members)
@@ -522,6 +536,8 @@ class EventMapController(
             if (eventId != null) onEventSelected(eventId) else {
                 if (expandedClusterEventIds.isNotEmpty()) {
                     expandedClusterEventIds = emptySet()
+                    clusterExpansionZoom = null
+                    awaitingClusterFrame = false
                     refreshSource()
                 }
                 onBackgroundClick()
@@ -566,7 +582,6 @@ class EventMapController(
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
         private const val CLUSTER_DISTANCE_PIXELS = 104f
         private const val INDIVIDUAL_MARKERS_ZOOM = 15.0
-        private const val CLUSTER_REFORM_ZOOM = 14.4
         private const val EVENT_HIT_RADIUS_PIXELS = 54f
         private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5
