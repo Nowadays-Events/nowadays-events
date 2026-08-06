@@ -1,6 +1,7 @@
 package com.nowadays.events.map
 
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventStatus
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
@@ -30,6 +31,7 @@ object EventGeoJsonMapper {
                 addStringProperty(EVENT_ID_PROPERTY, event.id)
                 addStringProperty("title", event.title)
                 addStringProperty("category", event.category.name)
+                addStringProperty("status", event.status.name)
                 addStringProperty("event_icon", "event-marker-${event.id}")
                 addStringProperty(
                     "event_date_label",
@@ -41,6 +43,8 @@ object EventGeoJsonMapper {
                 childCounts[event.id]?.takeIf { it > 0 }?.let { addStringProperty("main_badge_icon", "main-child-count-$it") }
                 val days = ChronoUnit.DAYS.between(today, event.startsAt.atZone(ZoneId.systemDefault()).toLocalDate()).coerceAtLeast(0)
                 val opacity = when {
+                    event.status == EventStatus.CANCELLED -> 0.5
+                    event.status == EventStatus.POSTPONED -> 0.75
                     days <= 1 -> 1.0
                     days >= 7 -> 0.35
                     else -> 1.0 - (days - 1) * 0.108

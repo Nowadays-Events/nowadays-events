@@ -33,6 +33,17 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertLess(distance_km(43.8904, -0.5007, 43.758, -0.572), 50)
         self.assertGreater(distance_km(43.8904, -0.5007, 48.8566, 2.3522), 50)
 
+    def test_postponed_is_not_treated_as_cancelled(self):
+        payload = {
+            "@type": "Event", "name": "Concert reporté",
+            "startDate": "2026-09-01T20:00:00+02:00",
+            "eventStatus": "https://schema.org/EventPostponed",
+            "url": "https://example.org/postponed",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        }
+        html = f'<script type="application/ld+json">{json.dumps(payload)}</script>'
+        self.assertEqual("postponed", extract_events(html, "Test", payload["url"])[0].status)
+
     def test_builds_validated_curated_event(self):
         event = event_from_curated({
             "@type": "Event",

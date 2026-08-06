@@ -4,6 +4,7 @@ import com.nowadays.events.domain.model.DataOrigin
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
+import com.nowadays.events.domain.model.EventStatus
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -33,6 +34,13 @@ class EventGeoJsonMapperTest {
         val features = EventGeoJsonMapper.map(listOf(first, second)).features().orEmpty()
         val points = features.map { it.geometry() as Point }
         assertTrue(points[0].latitude() != points[1].latitude() || points[0].longitude() != points[1].longitude())
+    }
+
+    @Test fun `exports cancellation status for map styling`() {
+        val feature = EventGeoJsonMapper.map(listOf(event("cancelled").copy(status = EventStatus.CANCELLED)))
+            .features().orEmpty().single()
+        assertEquals("CANCELLED", feature.getStringProperty("status"))
+        assertEquals(0.5, feature.getNumberProperty("event_opacity").toDouble(), 0.0)
     }
 
     private fun event(id: String) = Event(

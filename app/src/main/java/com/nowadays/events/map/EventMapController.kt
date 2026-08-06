@@ -10,6 +10,7 @@ import android.graphics.Rect
 import android.graphics.Path
 import android.view.Gravity
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventStatus
 import kotlin.math.floor
 import kotlin.math.min
 import org.maplibre.android.camera.CameraPosition
@@ -205,7 +206,7 @@ class EventMapController(
             val groups = proximityGroups(mapLibreMap, pendingEvents.filterNot { it.id in expandedClusterEventIds })
             val members = mutableMapOf<String, List<Event>>()
             val clusterPoints = mutableMapOf<String, Point>()
-            val clusterCounts = mutableSetOf<Int>()
+            val clusterIcons = mutableSetOf<Pair<Int, Boolean>>()
             val features = groups.mapIndexedNotNull { index, events ->
                 if (events.size == 1) {
                     regularFeatures[events.single().id]?.let(::markAsEvent)
@@ -219,13 +220,16 @@ class EventMapController(
                     Feature.fromGeometry(Point.fromLngLat(anchor.longitude, anchor.latitude)).apply {
                         addBooleanProperty(IS_CLUSTER_PROPERTY, true)
                         addNumberProperty(POINT_COUNT_PROPERTY, events.size)
-                        addStringProperty(CLUSTER_ICON_PROPERTY, clusterIconId(events.size))
+                        val hasCancelled = events.any { it.status == EventStatus.CANCELLED }
+                        addStringProperty(CLUSTER_ICON_PROPERTY, clusterIconId(events.size, hasCancelled))
                         addStringProperty(CLUSTER_KEY_PROPERTY, key)
                     }
-                        .also { clusterCounts += events.size }
+                        .also { clusterIcons += events.size to events.any { it.status == EventStatus.CANCELLED } }
                 }
             }
-            clusterCounts.forEach { count -> style.addImage(clusterIconId(count), createClusterBitmap(count)) }
+            clusterIcons.forEach { (count, hasCancelled) ->
+                style.addImage(clusterIconId(count, hasCancelled), createClusterBitmap(count, hasCancelled))
+            }
             clusterMembers = members
             renderedClusterPoints = clusterPoints
             val visibleFeatures = features + forcedFeatures
@@ -269,14 +273,15 @@ class EventMapController(
         addBooleanProperty(IS_CLUSTER_PROPERTY, false)
     }
 
-    private fun clusterIconId(count: Int) = "event-cluster-icon-$count"
+    private fun clusterIconId(count: Int, hasCancelled: Boolean = false) =
+        "event-cluster-icon-$count-${if (hasCancelled) "cancelled" else "active"}"
 
-    private fun createClusterBitmap(count: Int): Bitmap {
+    private fun createClusterBitmap(count: Int, hasCancelled: Boolean = false): Bitmap {
         val size = 72
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(103, 80, 164)
+            color = if (hasCancelled) Color.rgb(183, 28, 28) else Color.rgb(103, 80, 164)
             style = Paint.Style.FILL
         }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -324,22 +329,30 @@ class EventMapController(
         val radius = priority.radius
         val isLongRunning = MapMarkerPolicy.isLongRunning(event)
         val isRecurring = MapMarkerPolicy.isRecurring(event)
+        val isCancelled = event.status == EventStatus.CANCELLED
+        val isPostponed = event.status == EventStatus.POSTPONED
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = when {
+                isCancelled -> Color.rgb(198, 40, 40)
+                isPostponed -> Color.rgb(239, 108, 0)
                 isRecurring -> Color.rgb(0, 121, 107)
                 isLongRunning -> Color.rgb(0, 150, 136)
                 isChild -> Color.rgb(90, 150, 210)
                 isMain -> Color.rgb(103, 80, 164)
                 else -> categoryColor(event)
             }
-            this.alpha = alpha
+            this.alpha = when {
+                isCancelled -> minOf(alpha, 130)
+                isPostponed -> minOf(alpha, 205)
+                else -> alpha
+            }
         }
         val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
             strokeWidth = if (isMain) 7f else 4f
         }
-        if (isMain) {
+        if (isMain && !isCancelled && !isPostponed) {
             canvas.drawCircle(width / 2f, 35f, radius + 6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.rgb(103, 80, 164)
                 style = Paint.Style.STROKE
@@ -355,7 +368,11 @@ class EventMapController(
         canvas.drawPath(pin, fill)
         canvas.drawCircle(width / 2f, 34f, radius, fill)
         canvas.drawCircle(width / 2f, 34f, radius, border)
-        if (isMain) {
+        if (isCancelled) {
+            drawCancelledGlyph(canvas, width / 2f, 34f)
+        } else if (isPostponed) {
+            drawPostponedGlyph(canvas, width / 2f, 34f)
+        } else if (isMain) {
             val center = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
             canvas.drawCircle(width / 2f, 34f, 6f, center)
         } else if (isRecurring) {
@@ -444,6 +461,21 @@ class EventMapController(
             lineTo(x + 5f, y - 3f)
         }
         canvas.drawPath(arrow, Paint(paint).apply { style = Paint.Style.FILL })
+    }
+
+    private fun drawCancelledGlyph(canvas: Canvas, x: Float, y: Float) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 5f; strokeCap = Paint.Cap.ROUND
+        }
+        canvas.drawLine(x - 9f, y - 9f, x + 9f, y + 9f, paint)
+        canvas.drawLine(x + 9f, y - 9f, x - 9f, y + 9f, paint)
+    }
+
+    private fun drawPostponedGlyph(canvas: Canvas, x: Float, y: Float) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textAlign = Paint.Align.CENTER; textSize = 27f; typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText("!", x, y - (paint.ascent() + paint.descent()) / 2f, paint)
     }
 
     private fun updateHierarchyLines(style: Style, regularFeatures: Map<String, Feature>) {

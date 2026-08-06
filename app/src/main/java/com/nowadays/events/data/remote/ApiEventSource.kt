@@ -5,6 +5,7 @@ import com.nowadays.events.domain.model.DataOrigin
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
+import com.nowadays.events.domain.model.EventStatus
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -30,7 +31,6 @@ class ApiEventSource @Inject constructor() : EventSource {
             buildList {
                 for (index in 0 until array.length()) {
                     val item = array.optJSONObject(index) ?: continue
-                    if (item.optString("status", "active") == "cancelled") continue
                     val updatedAt = item.instant("last_seen_at") ?: Instant.now()
                     if (updatedSince != null && updatedAt <= updatedSince) continue
                     val start = item.instant("start_at") ?: continue
@@ -59,6 +59,11 @@ class ApiEventSource @Inject constructor() : EventSource {
                             price = EventPrice.Free,
                             updatedAt = updatedAt,
                             origin = DataOrigin.AUTOMATIC,
+                            status = when (item.optString("status", "active").lowercase()) {
+                                "cancelled" -> EventStatus.CANCELLED
+                                "postponed" -> EventStatus.POSTPONED
+                                else -> EventStatus.ACTIVE
+                            },
                         ),
                     )
                 }

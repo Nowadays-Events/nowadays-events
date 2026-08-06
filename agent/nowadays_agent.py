@@ -30,7 +30,8 @@ from urllib.parse import urljoin
 from provider_sources import MissingCredentials, collect_api_source
 
 USER_AGENT = "NowadaysEventAgent/0.1 (+local prototype)"
-CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled", "reporté", "reporte")
+CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled")
+POSTPONED_TOKENS = ("reporté", "reporte", "postponed", "rescheduled")
 
 
 class JsonLdParser(HTMLParser):
@@ -174,7 +175,12 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     event_url = canonical_url(first_text(node.get("url")) or page_url)
     status_value = normalize(first_text(node.get("eventStatus")))
     combined = normalize(" ".join((title, first_text(node.get("description")), status_value)))
-    status = "cancelled" if "cancel" in status_value or any(token in combined for token in CANCELLED_TOKENS) else "active"
+    if "cancel" in status_value or any(token in combined for token in CANCELLED_TOKENS):
+        status = "cancelled"
+    elif "postpon" in status_value or any(token in combined for token in POSTPONED_TOKENS):
+        status = "postponed"
+    else:
+        status = "active"
     venue = html.unescape(first_text(location.get("name"))).strip()
     address = html.unescape(address_text(location.get("address"))).strip()
     fingerprint_source = "|".join((normalize(title), start_at[:10], normalize(venue or address)))

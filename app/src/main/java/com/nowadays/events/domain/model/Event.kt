@@ -23,14 +23,15 @@ data class Event(
     val goingCount: Int = 0,
     val maybeCount: Int = 0,
     val isFictional: Boolean = false,
+    val status: EventStatus = EventStatus.ACTIVE,
 )
 
 enum class EventCategory { CULTURE, MUSIC, SPORT, FOOD, FAMILY, COMMUNITY, TECHNOLOGY }
 enum class DataOrigin { DEMO, MANUAL, AUTOMATIC }
 enum class AttendanceResponse { NONE, GOING, MAYBE }
+enum class EventStatus { ACTIVE, POSTPONED, CANCELLED }
 
 sealed interface EventPrice {
     data object Free : EventPrice
     data class Paid(val amountCents: Int?, val currency: String = "EUR") : EventPrice
 }
-

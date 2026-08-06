@@ -61,7 +61,7 @@ def number(*values: Any) -> float | None:
 def schema_event(
     *, title: str, description: str, start: str, end: str, url: str,
     venue: str, address: str, latitude: float | None, longitude: float | None,
-    cancelled: bool = False,
+    cancelled: bool = False, postponed: bool = False,
 ) -> dict[str, Any] | None:
     if not title or not start or latitude is None or longitude is None:
         return None
@@ -72,7 +72,11 @@ def schema_event(
         "startDate": start,
         "endDate": end or start,
         "url": url,
-        "eventStatus": "https://schema.org/EventCancelled" if cancelled else "https://schema.org/EventScheduled",
+        "eventStatus": (
+            "https://schema.org/EventCancelled" if cancelled else
+            "https://schema.org/EventPostponed" if postponed else
+            "https://schema.org/EventScheduled"
+        ),
         "location": {
             "@type": "Place",
             "name": venue,
@@ -110,6 +114,7 @@ def map_openagenda(item: dict[str, Any]) -> dict[str, Any] | None:
         latitude=number(location.get("latitude"), coordinates.get("latitude"), coordinates.get("lat")),
         longitude=number(location.get("longitude"), coordinates.get("longitude"), coordinates.get("lng")),
         cancelled=bool(item.get("removed")) or item.get("status") == 6,
+        postponed=item.get("status") == 4,
     )
 
 

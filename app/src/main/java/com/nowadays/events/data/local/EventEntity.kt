@@ -32,5 +32,5 @@ data class EventEntity(
     @ColumnInfo(name = "going_count") val goingCount: Int,
     @ColumnInfo(name = "maybe_count") val maybeCount: Int,
     @ColumnInfo(name = "is_fictional") val isFictional: Boolean,
+    @ColumnInfo(defaultValue = "ACTIVE") val status: String = "ACTIVE",
 )
-

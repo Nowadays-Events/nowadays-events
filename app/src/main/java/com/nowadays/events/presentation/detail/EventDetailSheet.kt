@@ -40,6 +40,11 @@ fun EventDetailSheet(
     var confirmDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var expanded by androidx.compose.runtime.remember(event.id) { androidx.compose.runtime.mutableStateOf(false) }
     val date = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withZone(ZoneId.systemDefault())
+    val headerColor = when (event.status) {
+        EventStatus.CANCELLED -> MaterialTheme.colorScheme.errorContainer
+        EventStatus.POSTPONED -> MaterialTheme.colorScheme.tertiaryContainer
+        EventStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = 590.dp).verticalScroll(rememberScrollState())
@@ -48,7 +53,7 @@ fun EventDetailSheet(
         ) {
             Surface(
                 shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = headerColor,
                 modifier = Modifier.fillMaxWidth().clickable { expanded = true },
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -56,6 +61,14 @@ fun EventDetailSheet(
                     if (expanded && relatedEventCount > 0) Text("Événement principal · $relatedEventCount rendez-vous liés", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (expanded) event.organizer?.let { Text("Par $it", style = MaterialTheme.typography.bodyMedium) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        when (event.status) {
+                            EventStatus.CANCELLED -> AssistChip(
+                                onClick = {}, label = { Text("ANNULÉ") },
+                                colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error),
+                            )
+                            EventStatus.POSTPONED -> AssistChip(onClick = {}, label = { Text("REPORTÉ") })
+                            EventStatus.ACTIVE -> Unit
+                        }
                         AssistChip(onClick = {}, label = { Text(event.category.label()) })
                         if (event.isFictional) AssistChip(onClick = {}, label = { Text("DÉMO") }, colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error))
                         Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiaryContainer) {
@@ -65,6 +78,19 @@ fun EventDetailSheet(
                 }
             }
             if (!expanded) return@Column
+            when (event.status) {
+                EventStatus.CANCELLED -> Text(
+                    "Cet événement a été annulé par l’organisateur. Il reste affiché pour vous en informer.",
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                EventStatus.POSTPONED -> Text(
+                    "Cet événement est reporté. Consultez la source avant de vous déplacer.",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                EventStatus.ACTIVE -> Unit
+            }
             InfoRow(Icons.Default.CalendarMonth, "Quand", "${date.format(event.startsAt)}\n${date.format(event.endsAt)}")
             InfoRow(Icons.Default.LocationOn, event.venueName, event.address)
             HorizontalDivider()
@@ -91,7 +117,7 @@ fun EventDetailSheet(
                     }
                 }
             }
-            ElevatedCard(Modifier.fillMaxWidth()) {
+            if (event.status != EventStatus.CANCELLED) ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Affluence indicative", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

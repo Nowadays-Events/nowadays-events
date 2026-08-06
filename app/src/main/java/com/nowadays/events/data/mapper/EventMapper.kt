@@ -5,6 +5,7 @@ import com.nowadays.events.domain.model.DataOrigin
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
+import com.nowadays.events.domain.model.EventStatus
 import java.time.Instant
 
 fun EventEntity.toDomain(): Event = Event(
@@ -15,6 +16,7 @@ fun EventEntity.toDomain(): Event = Event(
     organizer = organizer, price = if (isFree) EventPrice.Free else EventPrice.Paid(priceCents, currency),
     updatedAt = Instant.ofEpochMilli(updatedAtEpochMillis), origin = DataOrigin.valueOf(origin),
     goingCount = goingCount, maybeCount = maybeCount, isFictional = isFictional,
+    status = runCatching { EventStatus.valueOf(status) }.getOrDefault(EventStatus.ACTIVE),
 )
 
 fun Event.toEntity(): EventEntity = EventEntity(
@@ -25,5 +27,5 @@ fun Event.toEntity(): EventEntity = EventEntity(
     isFree = price is EventPrice.Free, priceCents = (price as? EventPrice.Paid)?.amountCents,
     currency = (price as? EventPrice.Paid)?.currency ?: "EUR", updatedAtEpochMillis = updatedAt.toEpochMilli(),
     origin = origin.name, goingCount = goingCount, maybeCount = maybeCount, isFictional = isFictional,
+    status = status.name,
 )
-
