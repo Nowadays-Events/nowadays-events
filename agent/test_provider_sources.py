@@ -19,6 +19,7 @@ class ProviderSourceTests(unittest.TestCase):
         })
         self.assertEqual("Exposition", result["name"])
         self.assertEqual("2026-08-07T18:00:00+0200", result["endDate"])
+        self.assertEqual(2, result["occurrenceCount"])
         self.assertIn("EventCancelled", result["eventStatus"])
 
     def test_maps_helloasso_directory_form(self):

@@ -44,6 +44,7 @@ fun EventDetailSheet(
         EventStatus.CANCELLED -> MaterialTheme.colorScheme.errorContainer
         EventStatus.POSTPONED -> MaterialTheme.colorScheme.tertiaryContainer
         EventStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
+        EventStatus.UNVERIFIED -> MaterialTheme.colorScheme.surfaceVariant
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Column(
@@ -60,6 +61,10 @@ fun EventDetailSheet(
                     Text(event.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     if (expanded && relatedEventCount > 0) Text("Événement principal · $relatedEventCount rendez-vous liés", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (expanded) event.organizer?.let { Text("Par $it", style = MaterialTheme.typography.bodyMedium) }
+                    if (expanded && event.occurrenceCount > 1) Text(
+                        "${event.occurrenceCount} occurrences programmées",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         when (event.status) {
                             EventStatus.CANCELLED -> AssistChip(
@@ -68,6 +73,7 @@ fun EventDetailSheet(
                             )
                             EventStatus.POSTPONED -> AssistChip(onClick = {}, label = { Text("REPORTÉ") })
                             EventStatus.ACTIVE -> Unit
+                            EventStatus.UNVERIFIED -> AssistChip(onClick = {}, label = { Text("À VÉRIFIER") })
                         }
                         AssistChip(onClick = {}, label = { Text(event.category.label()) })
                         if (event.isFictional) AssistChip(onClick = {}, label = { Text("DÉMO") }, colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error))
@@ -90,6 +96,11 @@ fun EventDetailSheet(
                     fontWeight = FontWeight.SemiBold,
                 )
                 EventStatus.ACTIVE -> Unit
+                EventStatus.UNVERIFIED -> Text(
+                    "La source de cet événement n’a pas été confirmée récemment. Vérifiez-la avant de vous déplacer.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             InfoRow(Icons.Default.CalendarMonth, "Quand", "${date.format(event.startsAt)}\n${date.format(event.endsAt)}")
             InfoRow(Icons.Default.LocationOn, event.venueName, event.address)
@@ -168,6 +179,7 @@ fun EventDetailSheet(
 
 private fun EventCategory.label() = name.lowercase().replaceFirstChar(Char::uppercase)
 private fun priceLabel(price: EventPrice): String = when (price) {
+    EventPrice.Unknown -> "Tarif non renseigné"
     EventPrice.Free -> "Gratuit"
     is EventPrice.Paid -> price.amountCents?.let { "%.2f %s".format(it / 100.0, price.currency) } ?: "Payant"
 }

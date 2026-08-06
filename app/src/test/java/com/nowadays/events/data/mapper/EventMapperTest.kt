@@ -19,6 +19,8 @@ class EventMapperTest {
             organizer = "Démo", price = EventPrice.Paid(1200), updatedAt = Instant.parse("2026-07-18T10:00:00Z"),
             origin = DataOrigin.DEMO, goingCount = 12, maybeCount = 4, isFictional = true,
             status = EventStatus.CANCELLED,
+            occurrenceCount = 8,
+            nextOccurrenceAt = Instant.parse("2026-07-25T18:00:00Z"),
         )
         assertEquals(event, event.toEntity().toDomain())
     }

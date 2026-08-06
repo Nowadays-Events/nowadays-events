@@ -62,10 +62,12 @@ def schema_event(
     *, title: str, description: str, start: str, end: str, url: str,
     venue: str, address: str, latitude: float | None, longitude: float | None,
     cancelled: bool = False, postponed: bool = False,
+    category: str = "", price: float | None = None, currency: str = "EUR",
+    occurrence_count: int = 1, next_occurrence: str = "",
 ) -> dict[str, Any] | None:
     if not title or not start or latitude is None or longitude is None:
         return None
-    return {
+    event = {
         "@type": "Event",
         "name": title,
         "description": description,
@@ -84,6 +86,14 @@ def schema_event(
             "geo": {"latitude": latitude, "longitude": longitude},
         },
     }
+    if category:
+        event["category"] = category
+    if price is not None:
+        event["offers"] = {"@type": "Offer", "price": price, "priceCurrency": currency}
+    event["occurrenceCount"] = max(1, occurrence_count)
+    if next_occurrence:
+        event["nextOccurrenceDate"] = next_occurrence
+    return event
 
 
 def map_openagenda(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -91,6 +101,8 @@ def map_openagenda(item: dict[str, Any]) -> dict[str, Any] | None:
     timings = item.get("timings") or []
     first = timings[0] if timings else {}
     last = timings[-1] if timings else first
+    now = datetime.now(timezone.utc)
+    next_timing = next((timing for timing in timings if _future_timing(timing, now)), first)
     coordinates = location.get("coordinates") or location.get("geo") or {}
     agenda = item.get("originAgenda") or item.get("sourceAgenda") or item.get("agenda") or {}
     slug = localized(item.get("slug"))
@@ -115,7 +127,21 @@ def map_openagenda(item: dict[str, Any]) -> dict[str, Any] | None:
         longitude=number(location.get("longitude"), coordinates.get("longitude"), coordinates.get("lng")),
         cancelled=bool(item.get("removed")) or item.get("status") == 6,
         postponed=item.get("status") == 4,
+        category=localized(item.get("keywords") or item.get("category")),
+        occurrence_count=len(timings) or 1,
+        next_occurrence=localized(next_timing.get("begin") or next_timing.get("start")),
     )
+
+
+def _future_timing(timing: dict[str, Any], now: datetime) -> bool:
+    raw = localized(timing.get("end") or timing.get("begin") or timing.get("start"))
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc) >= now
+    except ValueError:
+        return False
 
 
 def openagenda_events(source: dict[str, Any], center: dict[str, Any], timeout: int) -> list[dict[str, Any]]:
@@ -171,6 +197,8 @@ def map_helloasso(item: dict[str, Any]) -> dict[str, Any] | None:
         latitude=number(place.get("latitude"), address_node.get("latitude") if isinstance(address_node, dict) else None),
         longitude=number(place.get("longitude"), address_node.get("longitude") if isinstance(address_node, dict) else None),
         cancelled=localized(item.get("state")).lower() in {"disabled", "deleted"},
+        category=localized(item.get("activityType") or item.get("formType")),
+        price=0.0 if item.get("isFree") is True else None,
     )
 
 
@@ -196,6 +224,9 @@ def map_eventbrite(item: dict[str, Any]) -> dict[str, Any] | None:
     venue = item.get("venue") or {}
     address_node = venue.get("address") or {}
     start, end = item.get("start") or {}, item.get("end") or {}
+    tickets = item.get("ticket_availability") or {}
+    minimum = tickets.get("minimum_ticket_price") or {}
+    major_price = number(minimum.get("major_value"))
     return schema_event(
         title=localized(item.get("name")), description=localized(item.get("description") or item.get("summary")),
         start=localized(start.get("utc") or start.get("local")), end=localized(end.get("utc") or end.get("local")),
@@ -204,6 +235,9 @@ def map_eventbrite(item: dict[str, Any]) -> dict[str, Any] | None:
         latitude=number(address_node.get("latitude"), venue.get("latitude")),
         longitude=number(address_node.get("longitude"), venue.get("longitude")),
         cancelled=localized(item.get("status")).lower() in {"canceled", "cancelled"},
+        category=localized((item.get("category") or {}).get("name")),
+        price=major_price,
+        currency=localized(minimum.get("currency")) or "EUR",
     )
 
 
@@ -219,7 +253,7 @@ def eventbrite_events(source: dict[str, Any], center: dict[str, Any], timeout: i
             query = urllib.parse.urlencode({
                 "status": status,
                 "time_filter": "all" if status == "canceled" else "current_future",
-                "expand": "venue,organizer,category",
+                "expand": "venue,organizer,category,ticket_availability",
             })
             payload = request_json(
                 f"https://www.eventbriteapi.com/v3/organizations/{organization}/events/?{query}",

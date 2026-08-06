@@ -15,7 +15,7 @@ internal object MapMarkerPolicy {
         event.endsAt.epochSecond - event.startsAt.epochSecond >= LONG_RUNNING_SECONDS
 
     fun isRecurring(event: Event): Boolean =
-        event.endsAt.epochSecond - event.startsAt.epochSecond >= RECURRING_SECONDS
+        event.occurrenceCount > 1 || event.endsAt.epochSecond - event.startsAt.epochSecond >= RECURRING_SECONDS
 
     fun displayDate(
         event: Event,
@@ -24,7 +24,12 @@ internal object MapMarkerPolicy {
     ): LocalDate {
         val start = event.startsAt.atZone(zoneId).toLocalDate()
         val end = event.endsAt.atZone(zoneId).toLocalDate()
-        return if (isRecurring(event) && today in start..end) today else start
+        val next = event.nextOccurrenceAt?.atZone(zoneId)?.toLocalDate()
+        return when {
+            isRecurring(event) && next != null && next >= today -> next
+            isRecurring(event) && today in start..end -> today
+            else -> start
+        }
     }
 
     fun priority(

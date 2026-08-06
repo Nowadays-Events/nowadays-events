@@ -26,6 +26,7 @@ data class EventEntity(
     val organizer: String?,
     @ColumnInfo(name = "is_free") val isFree: Boolean,
     @ColumnInfo(name = "price_cents") val priceCents: Int?,
+    @ColumnInfo(name = "price_type", defaultValue = "UNKNOWN") val priceType: String = "UNKNOWN",
     val currency: String,
     @ColumnInfo(name = "updated_at") val updatedAtEpochMillis: Long,
     val origin: String,
@@ -33,4 +34,6 @@ data class EventEntity(
     @ColumnInfo(name = "maybe_count") val maybeCount: Int,
     @ColumnInfo(name = "is_fictional") val isFictional: Boolean,
     @ColumnInfo(defaultValue = "ACTIVE") val status: String = "ACTIVE",
+    @ColumnInfo(name = "occurrence_count", defaultValue = "1") val occurrenceCount: Int = 1,
+    @ColumnInfo(name = "next_occurrence_at") val nextOccurrenceAtEpochMillis: Long? = null,
 )

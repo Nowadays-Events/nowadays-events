@@ -41,6 +41,13 @@ class MapMarkerPolicyTest {
         assertEquals(LocalDate.of(2026, 8, 1), MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 
+    @Test fun `recurring event displays its next real occurrence`() {
+        val next = Instant.parse("2026-08-02T16:00:00Z")
+        val recurring = event("2026-07-01T10:00:00Z", "2026-08-31T18:00:00Z")
+            .copy(occurrenceCount = 12, nextOccurrenceAt = next)
+        assertEquals(LocalDate.of(2026, 8, 2), MapMarkerPolicy.displayDate(recurring, today, zone))
+    }
+
     private fun event(start: String, end: String = "2026-07-29T12:00:00Z") = Event(
         id = start, title = "Test", shortDescription = "Test", fullDescription = null,
         category = EventCategory.CULTURE, startsAt = Instant.parse(start), endsAt = Instant.parse(end),

@@ -331,10 +331,12 @@ class EventMapController(
         val isRecurring = MapMarkerPolicy.isRecurring(event)
         val isCancelled = event.status == EventStatus.CANCELLED
         val isPostponed = event.status == EventStatus.POSTPONED
+        val isUnverified = event.status == EventStatus.UNVERIFIED
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = when {
                 isCancelled -> Color.rgb(198, 40, 40)
                 isPostponed -> Color.rgb(239, 108, 0)
+                isUnverified -> Color.rgb(96, 104, 112)
                 isRecurring -> Color.rgb(0, 121, 107)
                 isLongRunning -> Color.rgb(0, 150, 136)
                 isChild -> Color.rgb(90, 150, 210)
@@ -344,6 +346,7 @@ class EventMapController(
             this.alpha = when {
                 isCancelled -> minOf(alpha, 130)
                 isPostponed -> minOf(alpha, 205)
+                isUnverified -> minOf(alpha, 115)
                 else -> alpha
             }
         }
@@ -352,7 +355,7 @@ class EventMapController(
             style = Paint.Style.STROKE
             strokeWidth = if (isMain) 7f else 4f
         }
-        if (isMain && !isCancelled && !isPostponed) {
+        if (isMain && !isCancelled && !isPostponed && !isUnverified) {
             canvas.drawCircle(width / 2f, 35f, radius + 6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.rgb(103, 80, 164)
                 style = Paint.Style.STROKE
@@ -372,6 +375,8 @@ class EventMapController(
             drawCancelledGlyph(canvas, width / 2f, 34f)
         } else if (isPostponed) {
             drawPostponedGlyph(canvas, width / 2f, 34f)
+        } else if (isUnverified) {
+            drawUnverifiedGlyph(canvas, width / 2f, 34f)
         } else if (isMain) {
             val center = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
             canvas.drawCircle(width / 2f, 34f, 6f, center)
@@ -476,6 +481,13 @@ class EventMapController(
             color = Color.WHITE; textAlign = Paint.Align.CENTER; textSize = 27f; typeface = Typeface.DEFAULT_BOLD
         }
         canvas.drawText("!", x, y - (paint.ascent() + paint.descent()) / 2f, paint)
+    }
+
+    private fun drawUnverifiedGlyph(canvas: Canvas, x: Float, y: Float) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textAlign = Paint.Align.CENTER; textSize = 25f; typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText("?", x, y - (paint.ascent() + paint.descent()) / 2f, paint)
     }
 
     private fun updateHierarchyLines(style: Style, regularFeatures: Map<String, Feature>) {

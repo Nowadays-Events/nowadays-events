@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_events, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_events, hydrate_previous_feed, mark_unverified, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -43,6 +43,23 @@ class NowadaysAgentTests(unittest.TestCase):
         }
         html = f'<script type="application/ld+json">{json.dumps(payload)}</script>'
         self.assertEqual("postponed", extract_events(html, "Test", payload["url"])[0].status)
+
+    def test_extracts_category_and_price_without_inventing_free(self):
+        base = {
+            "@type": "Event", "name": "Concert jazz", "startDate": "2026-09-01T20:00:00+02:00",
+            "url": "https://example.org/jazz",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        }
+        unknown = extract_events(
+            f'<script type="application/ld+json">{json.dumps(base)}</script>', "Test", base["url"],
+        )[0]
+        paid_payload = {**base, "offers": {"price": "12.50", "priceCurrency": "EUR"}}
+        paid = extract_events(
+            f'<script type="application/ld+json">{json.dumps(paid_payload)}</script>', "Test", base["url"],
+        )[0]
+        self.assertEqual("MUSIC", unknown.category)
+        self.assertEqual("unknown", unknown.price_type)
+        self.assertEqual(("paid", 1250, "EUR"), (paid.price_type, paid.price_cents, paid.currency))
 
     def test_builds_validated_curated_event(self):
         event = event_from_curated({
@@ -102,6 +119,23 @@ class NowadaysAgentTests(unittest.TestCase):
             output = Path(directory) / "events.json"
             self.assertEqual(1, export_feed(database, output))
             self.assertEqual(2, len(json.loads(output.read_text())["events"][0]["source_urls"]))
+
+    def test_previous_feed_becomes_unverified_without_becoming_cancelled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            feed = Path(directory) / "previous.json"
+            feed.write_text(json.dumps({"events": [{
+                "external_id": "old", "title": "Ancien événement", "description": "",
+                "start_at": "2026-08-10T10:00:00+00:00", "end_at": "2026-08-10T12:00:00+00:00",
+                "venue": "Salle", "address": "Mont-de-Marsan", "latitude": 43.89, "longitude": -0.50,
+                "status": "active", "fingerprint": "fingerprint-old",
+                "first_seen_at": "2026-08-01T10:00:00+00:00", "last_seen_at": "2026-08-01T10:00:00+00:00",
+                "source_urls": ["https://example.org/old"],
+            }]}), encoding="utf-8")
+            database = sqlite3.connect(":memory:")
+            database.executescript(SCHEMA)
+            self.assertEqual(1, hydrate_previous_feed(database, feed))
+            self.assertEqual(1, mark_unverified(database, "2026-08-06T10:00:00+00:00"))
+            self.assertEqual("unverified", database.execute("SELECT status FROM events").fetchone()[0])
 
 
 if __name__ == "__main__":

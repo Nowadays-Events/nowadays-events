@@ -23,3 +23,17 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE'")
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN price_type TEXT NOT NULL DEFAULT 'UNKNOWN'")
+        db.execSQL("UPDATE events SET price_type = CASE WHEN is_free = 1 THEN 'FREE' ELSE 'PAID' END")
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE events ADD COLUMN next_occurrence_at INTEGER")
+    }
+}

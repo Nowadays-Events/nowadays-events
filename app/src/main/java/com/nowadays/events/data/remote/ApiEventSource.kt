@@ -56,14 +56,24 @@ class ApiEventSource @Inject constructor() : EventSource {
                                 .ifBlank { BuildConfig.NOWADAYS_API_BASE_URL },
                             imageUrl = null,
                             organizer = item.optString("source_name").ifBlank { null },
-                            price = EventPrice.Free,
+                            price = when (item.optString("price_type", "unknown").lowercase()) {
+                                "free" -> EventPrice.Free
+                                "paid" -> EventPrice.Paid(
+                                    item.takeIf { it.has("price_cents") && !it.isNull("price_cents") }?.getInt("price_cents"),
+                                    item.optString("currency", "EUR"),
+                                )
+                                else -> EventPrice.Unknown
+                            },
                             updatedAt = updatedAt,
                             origin = DataOrigin.AUTOMATIC,
                             status = when (item.optString("status", "active").lowercase()) {
                                 "cancelled" -> EventStatus.CANCELLED
                                 "postponed" -> EventStatus.POSTPONED
+                                "unverified" -> EventStatus.UNVERIFIED
                                 else -> EventStatus.ACTIVE
                             },
+                            occurrenceCount = item.optInt("occurrence_count", 1).coerceAtLeast(1),
+                            nextOccurrenceAt = item.instant("next_occurrence_at"),
                         ),
                     )
                 }

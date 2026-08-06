@@ -20,7 +20,7 @@ import time
 import unicodedata
 import urllib.request
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable
@@ -84,6 +84,12 @@ class Event:
     source_name: str
     status: str
     fingerprint: str
+    category: str = "COMMUNITY"
+    price_type: str = "unknown"
+    price_cents: int | None = None
+    currency: str = "EUR"
+    occurrence_count: int = 1
+    next_occurrence_at: str | None = None
 
 
 def normalize(value: str) -> str:
@@ -139,6 +145,35 @@ def parse_float(value: Any) -> float | None:
         return None
 
 
+def event_category(node: dict[str, Any]) -> str:
+    raw = normalize(" ".join((
+        first_text(node.get("category")),
+        first_text(node.get("keywords")),
+        first_text(node.get("name")),
+    )))
+    mappings = (
+        ("MUSIC", ("musique", "concert", "festival", "dj")),
+        ("SPORT", ("sport", "course", "match", "randonnée", "randonnee", "vélo", "velo")),
+        ("FOOD", ("gastronomie", "marché", "marche", "repas", "dégustation", "degustation")),
+        ("FAMILY", ("famille", "enfant", "jeunesse")),
+        ("TECHNOLOGY", ("numérique", "numerique", "technologie", "science")),
+        ("CULTURE", ("culture", "exposition", "théâtre", "theatre", "cinéma", "cinema", "patrimoine")),
+    )
+    return next((category for category, tokens in mappings if any(token in raw for token in tokens)), "COMMUNITY")
+
+
+def event_price(node: dict[str, Any]) -> tuple[str, int | None, str]:
+    offers = node.get("offers")
+    offer = offers[0] if isinstance(offers, list) and offers else offers
+    if not isinstance(offer, dict) or offer.get("price") in (None, ""):
+        return "unknown", None, "EUR"
+    price = parse_float(offer.get("price"))
+    currency = str(offer.get("priceCurrency") or "EUR").upper()
+    if price is None:
+        return "unknown", None, currency
+    return ("free", 0, currency) if price == 0 else ("paid", round(price * 100), currency)
+
+
 def iso_datetime(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -186,6 +221,9 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     fingerprint_source = "|".join((normalize(title), start_at[:10], normalize(venue or address)))
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()[:24]
     external_id = hashlib.sha256(f"{event_url}|{fingerprint}".encode("utf-8")).hexdigest()[:32]
+    price_type, price_cents, currency = event_price(node)
+    occurrence_count = max(1, int(node.get("occurrenceCount") or 1))
+    next_occurrence_at = iso_datetime(node.get("nextOccurrenceDate")) or None
     return Event(
         external_id=external_id,
         title=title,
@@ -200,6 +238,12 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
         source_name=source_name,
         status=status,
         fingerprint=fingerprint,
+        category=event_category(node),
+        price_type=price_type,
+        price_cents=price_cents,
+        currency=currency,
+        occurrence_count=occurrence_count,
+        next_occurrence_at=next_occurrence_at,
     )
 
 
@@ -277,6 +321,12 @@ CREATE TABLE IF NOT EXISTS events (
     fingerprint TEXT NOT NULL,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL
+    ,category TEXT NOT NULL DEFAULT 'COMMUNITY'
+    ,price_type TEXT NOT NULL DEFAULT 'unknown'
+    ,price_cents INTEGER
+    ,currency TEXT NOT NULL DEFAULT 'EUR'
+    ,occurrence_count INTEGER NOT NULL DEFAULT 1
+    ,next_occurrence_at TEXT
 );
 CREATE TABLE IF NOT EXISTS event_sources (
     external_id TEXT NOT NULL,
@@ -303,19 +353,27 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
             inserted += 1
         connection.execute(
             """
-            INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO events
+            (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,status,
+             fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
+             occurrence_count,next_occurrence_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(external_id) DO UPDATE SET
               title=excluded.title, description=excluded.description,
               start_at=excluded.start_at, end_at=excluded.end_at,
               venue=excluded.venue, address=excluded.address,
               latitude=excluded.latitude, longitude=excluded.longitude,
               status=excluded.status, fingerprint=excluded.fingerprint,
+              category=excluded.category, price_type=excluded.price_type,
+              price_cents=excluded.price_cents, currency=excluded.currency,
+              occurrence_count=excluded.occurrence_count, next_occurrence_at=excluded.next_occurrence_at,
               last_seen_at=excluded.last_seen_at
             """,
             (
                 chosen_id, event.title, event.description, event.start_at, event.end_at,
                 event.venue, event.address, event.latitude, event.longitude, event.status,
-                event.fingerprint, now, now,
+                event.fingerprint, now, now, event.category, event.price_type, event.price_cents, event.currency,
+                event.occurrence_count, event.next_occurrence_at,
             ),
         )
         connection.execute(
@@ -326,6 +384,54 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
             (chosen_id, event.source_url, event.source_name, now),
         )
     return inserted, updated
+
+
+def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None) -> int:
+    """Recharge le dernier flux public pour conserver l'historique entre deux runners GitHub."""
+    if feed_path is None or not feed_path.exists():
+        return 0
+    payload = json.loads(feed_path.read_text(encoding="utf-8"))
+    hydrated = 0
+    for item in payload.get("events", []):
+        required = ("external_id", "title", "start_at", "end_at", "latitude", "longitude")
+        if any(item.get(key) is None for key in required):
+            continue
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO events
+            (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,
+             status,fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
+             occurrence_count,next_occurrence_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                item["external_id"], item["title"], item.get("description", ""),
+                item["start_at"], item["end_at"], item.get("venue", ""), item.get("address", ""),
+                item["latitude"], item["longitude"], item.get("status", "active"),
+                item.get("fingerprint") or hashlib.sha256(str(item["external_id"]).encode()).hexdigest()[:24],
+                item.get("first_seen_at") or item.get("last_seen_at") or datetime.now(timezone.utc).isoformat(),
+                item.get("last_seen_at") or datetime.now(timezone.utc).isoformat(),
+                item.get("category", "COMMUNITY"), item.get("price_type", "unknown"),
+                item.get("price_cents"), item.get("currency", "EUR"),
+                item.get("occurrence_count", 1), item.get("next_occurrence_at"),
+            ),
+        )
+        for url in item.get("source_urls") or []:
+            connection.execute(
+                "INSERT OR IGNORE INTO event_sources VALUES (?,?,?,?)",
+                (item["external_id"], url, "Flux public précédent", item.get("last_seen_at") or datetime.now(timezone.utc).isoformat()),
+            )
+        hydrated += 1
+    return hydrated
+
+
+def mark_unverified(connection: sqlite3.Connection, now: str, grace_hours: int = 48) -> int:
+    cutoff = (datetime.fromisoformat(now) - timedelta(hours=grace_hours)).isoformat()
+    cursor = connection.execute(
+        "UPDATE events SET status='unverified' WHERE status='active' AND last_seen_at < ?",
+        (cutoff,),
+    )
+    return cursor.rowcount
 
 
 def export_feed(connection: sqlite3.Connection, output: Path) -> int:
@@ -378,6 +484,7 @@ def run(
     output_path: Path,
     max_pages: int | None = None,
     max_runtime_seconds: int = 180,
+    previous_feed_path: Path | None = None,
 ) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     center = config["center"]
@@ -449,7 +556,9 @@ def run(
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(database_path) as connection:
         connection.executescript(SCHEMA)
+        hydrated = hydrate_previous_feed(connection, previous_feed_path)
         inserted, updated = persist(connection, collected, now)
+        unverified = mark_unverified(connection, now)
         exported = export_feed(connection, output_path)
     pending_candidates = export_candidates(config, output_path.with_name("candidates.json"), now)
     report = {
@@ -462,6 +571,8 @@ def run(
         "fetched_events": len(collected),
         "inserted": inserted,
         "updated": updated,
+        "hydrated_from_previous_feed": hydrated,
+        "marked_unverified": unverified,
         "exported": exported,
         "failures": failures,
     }
@@ -480,6 +591,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=root / "output" / "events.json")
     parser.add_argument("--max-pages", type=int, default=None, help="plafond de pages de détail par source")
     parser.add_argument("--max-runtime-seconds", type=int, default=180)
+    parser.add_argument("--previous-feed", type=Path, default=None)
     arguments = parser.parse_args()
     return run(
         arguments.config,
@@ -487,6 +599,7 @@ def main() -> int:
         arguments.output,
         arguments.max_pages,
         arguments.max_runtime_seconds,
+        arguments.previous_feed,
     )
 
 

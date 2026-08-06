@@ -37,6 +37,13 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s agent -p "test_*.py" -v
 
+      - name: Restore previous public feed
+        run: |
+          mkdir -p agent/output
+          curl --fail --silent --show-error --max-time 15 \
+            --output agent/output/previous-events.json \
+            https://nowadays-events.github.io/nowadays-events/events.json || true
+
       - name: Collect events
         env:
           OPENAGENDA_API_KEY: ${{ secrets.OPENAGENDA_API_KEY }}
@@ -44,7 +51,7 @@ jobs:
           HELLOASSO_CLIENT_SECRET: ${{ secrets.HELLOASSO_CLIENT_SECRET }}
           EVENTBRITE_PRIVATE_TOKEN: ${{ secrets.EVENTBRITE_PRIVATE_TOKEN }}
           EVENTBRITE_ORGANIZATION_IDS: ${{ secrets.EVENTBRITE_ORGANIZATION_IDS }}
-        run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180
+        run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
 
       - name: Build public feed
         run: |

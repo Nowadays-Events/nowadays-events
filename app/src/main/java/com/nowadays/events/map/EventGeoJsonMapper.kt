@@ -45,6 +45,7 @@ object EventGeoJsonMapper {
                 val opacity = when {
                     event.status == EventStatus.CANCELLED -> 0.5
                     event.status == EventStatus.POSTPONED -> 0.75
+                    event.status == EventStatus.UNVERIFIED -> 0.45
                     days <= 1 -> 1.0
                     days >= 7 -> 0.35
                     else -> 1.0 - (days - 1) * 0.108
