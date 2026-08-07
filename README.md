@@ -34,9 +34,12 @@ GitHub (`Settings > Emails`), puis choisie comme adresse par défaut dans
 dans le dépôt.
 
 Une annulation explicitement signalée par une source officielle est détectée avec le
-statut `cancelled` et n’est pas importée par l’application. La suppression d’une ancienne
-copie déjà mise en cache sur un téléphone nécessite encore la future synchronisation
-du cycle de vie des événements.
+statut `cancelled`, synchronisée et conservée dans l’application. Elle apparaît en rouge
+afin d’informer l’utilisateur au lieu de disparaître silencieusement.
+
+Les ajouts manuels restent locaux à l’appareil. Ils ne rejoignent pas le flux public sans
+validation administrateur. Depuis chaque fiche, un signalement prérempli peut être envoyé
+par e-mail pour indiquer une annulation, une erreur de date ou de lieu, ou un doublon.
 
 Packages préparés : `presentation`, `domain`, `data`, `local`, `remote`, `map` et `sync`. Ils seront peuplés progressivement sans créer de modules Gradle prématurés.
 

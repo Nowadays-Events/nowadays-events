@@ -38,6 +38,7 @@ fun EventDetailSheet(
 ) {
     val context = LocalContext.current
     var confirmDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var reportEvent by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var expanded by androidx.compose.runtime.remember(event.id) { androidx.compose.runtime.mutableStateOf(false) }
     val date = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withZone(ZoneId.systemDefault())
     val headerColor = when (event.status) {
@@ -128,6 +129,11 @@ fun EventDetailSheet(
                     }
                 }
             }
+            OutlinedButton(onClick = { reportEvent = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Flag, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Signaler une information incorrecte")
+            }
             if (event.status != EventStatus.CANCELLED) ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Affluence indicative", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -169,6 +175,37 @@ fun EventDetailSheet(
         },
         confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Supprimer") } },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Annuler") } },
+    )
+    if (reportEvent) AlertDialog(
+        onDismissRequest = { reportEvent = false },
+        title = { Text("Que faut-il vérifier ?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(
+                    "L’événement est annulé",
+                    "La date ou l’horaire est incorrect",
+                    "Le lieu est incorrect",
+                    "C’est un doublon",
+                    "Autre information incorrecte",
+                ).forEach { reason ->
+                    TextButton(
+                        onClick = {
+                            val subject = "[Nowly Events] Signalement : ${event.title}"
+                            val body = "Motif : $reason\n\nÉvénement : ${event.title}\nDate : ${date.format(event.startsAt)}\nSource : ${event.sourceUrl}\nIdentifiant : ${event.id}\n\nPrécisions : "
+                            val uri = Uri.parse("mailto:vincent.delporte84@outlook.fr").buildUpon()
+                                .appendQueryParameter("subject", subject)
+                                .appendQueryParameter("body", body)
+                                .build()
+                            runCatching { context.startActivity(Intent(Intent.ACTION_SENDTO, uri)) }
+                            reportEvent = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(reason, modifier = Modifier.fillMaxWidth()) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { reportEvent = false }) { Text("Fermer") } },
     )
 }
 

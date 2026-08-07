@@ -39,7 +39,7 @@ fun EventFormScreen(onBack: () -> Unit, onSaved: (Double, Double) -> Unit, viewM
         }
     }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Ajouter un événement") }, navigationIcon = {
+        topBar = { TopAppBar(title = { Text("Ajouter un événement local") }, navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Retour") }
         }) },
     ) { padding ->
@@ -48,6 +48,11 @@ fun EventFormScreen(onBack: () -> Unit, onSaved: (Double, Double) -> Unit, viewM
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+            Text(
+                "Cet ajout reste sur cet appareil. Les événements du flux public sont contrôlés par l’administrateur.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Gagner du temps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -122,7 +127,7 @@ fun EventFormScreen(onBack: () -> Unit, onSaved: (Double, Double) -> Unit, viewM
                 if (!state.isFree) FormField("Prix en euros *", state.priceEuros, state.errors.price, KeyboardType.Decimal) { viewModel.update(EventFormField.PRICE_EUROS, it) }
             }
             Button(onClick = viewModel::save, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text(if (state.isSaving) "Enregistrement…" else "Publier l’événement")
+                Text(if (state.isSaving) "Enregistrement…" else "Enregistrer sur cet appareil")
             }
             Text("* Champs obligatoires", style = MaterialTheme.typography.bodySmall)
             }
@@ -132,7 +137,7 @@ fun EventFormScreen(onBack: () -> Unit, onSaved: (Double, Double) -> Unit, viewM
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
                 ) {
                     Text(
-                        "Événement publié",
+                        "Événement enregistré sur cet appareil",
                         Modifier.padding(horizontal = 22.dp, vertical = 14.dp),
                         fontWeight = FontWeight.SemiBold,
                     )
