@@ -15,7 +15,6 @@ data class Event(
     val latitude: Double,
     val longitude: Double,
     val sourceUrl: String,
-    val sourceUrls: List<String> = listOf(sourceUrl),
     val imageUrl: String?,
     val organizer: String?,
     val price: EventPrice,
@@ -27,6 +26,7 @@ data class Event(
     val status: EventStatus = EventStatus.ACTIVE,
     val occurrenceCount: Int = 1,
     val nextOccurrenceAt: Instant? = null,
+    val sourceUrls: List<String> = listOf(sourceUrl),
 )
 
 enum class EventCategory { CULTURE, MUSIC, SPORT, FOOD, FAMILY, COMMUNITY, TECHNOLOGY }
