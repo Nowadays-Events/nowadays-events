@@ -43,7 +43,9 @@ jobs:
           cache: gradle
 
       - name: Test and build debug APK
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
 
       - name: Upload APK for inspection
         uses: actions/upload-artifact@v6
