@@ -12,7 +12,10 @@ fun EventEntity.toDomain(): Event = Event(
     id = id, title = title, shortDescription = shortDescription, fullDescription = fullDescription,
     category = EventCategory.valueOf(category), startsAt = Instant.ofEpochMilli(startsAtEpochMillis),
     endsAt = Instant.ofEpochMilli(endsAtEpochMillis), venueName = venueName, address = address,
-    latitude = latitude, longitude = longitude, sourceUrl = sourceUrl, imageUrl = imageUrl,
+    latitude = latitude, longitude = longitude, sourceUrl = sourceUrl,
+    sourceUrls = sourceUrls.lineSequence().map(String::trim).filter(String::isNotBlank).toList()
+        .ifEmpty { listOf(sourceUrl) },
+    imageUrl = imageUrl,
     organizer = organizer, price = when (priceType) {
         "FREE" -> EventPrice.Free
         "PAID" -> EventPrice.Paid(priceCents, currency)
@@ -29,7 +32,8 @@ fun Event.toEntity(): EventEntity = EventEntity(
     id = id, title = title, shortDescription = shortDescription, fullDescription = fullDescription,
     category = category.name, startsAtEpochMillis = startsAt.toEpochMilli(), endsAtEpochMillis = endsAt.toEpochMilli(),
     venueName = venueName, address = address, latitude = latitude, longitude = longitude,
-    sourceUrl = sourceUrl, imageUrl = imageUrl, organizer = organizer,
+    sourceUrl = sourceUrl, sourceUrls = sourceUrls.distinct().joinToString("\n"),
+    imageUrl = imageUrl, organizer = organizer,
     isFree = price is EventPrice.Free, priceCents = (price as? EventPrice.Paid)?.amountCents,
     priceType = when (price) {
         EventPrice.Unknown -> "UNKNOWN"

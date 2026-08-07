@@ -45,7 +45,7 @@ object EventFamilyGrouper {
             val children = deduplicateChildren(bundles.flatMap(Bundle::events)
                 .filterNot { it.id == main.id || it.id in secondaryParents }
                 .sortedBy(Event::startsAt))
-            EventFamily(main, children, bundles.flatMap(Bundle::events).map(Event::sourceUrl).distinct())
+            EventFamily(main, children, bundles.flatMap(Bundle::events).flatMap(Event::sourceUrls).distinct())
         }
     }
 

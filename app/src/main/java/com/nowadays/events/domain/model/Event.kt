@@ -15,6 +15,7 @@ data class Event(
     val latitude: Double,
     val longitude: Double,
     val sourceUrl: String,
+    val sourceUrls: List<String> = listOf(sourceUrl),
     val imageUrl: String?,
     val organizer: String?,
     val price: EventPrice,

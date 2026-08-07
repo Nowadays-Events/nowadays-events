@@ -22,6 +22,7 @@ data class EventEntity(
     val latitude: Double,
     val longitude: Double,
     @ColumnInfo(name = "source_url") val sourceUrl: String,
+    @ColumnInfo(name = "source_urls", defaultValue = "") val sourceUrls: String = "",
     @ColumnInfo(name = "image_url") val imageUrl: String?,
     val organizer: String?,
     @ColumnInfo(name = "is_free") val isFree: Boolean,

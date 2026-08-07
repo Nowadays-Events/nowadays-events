@@ -37,3 +37,10 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE events ADD COLUMN next_occurrence_at INTEGER")
     }
 }
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN source_urls TEXT NOT NULL DEFAULT ''")
+        db.execSQL("UPDATE events SET source_urls = source_url WHERE source_urls = ''")
+    }
+}

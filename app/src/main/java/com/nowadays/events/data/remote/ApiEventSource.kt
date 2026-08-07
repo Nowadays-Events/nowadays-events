@@ -37,6 +37,13 @@ class ApiEventSource @Inject constructor() : EventSource {
                     val end = item.instant("end_at") ?: start
                     val title = item.optString("title")
                     if (title.isBlank()) continue
+                    val sourceUrls = item.optJSONArray("source_urls")?.let { urls ->
+                        buildList {
+                            for (urlIndex in 0 until urls.length()) {
+                                urls.optString(urlIndex).takeIf(String::isNotBlank)?.let(::add)
+                            }
+                        }
+                    }.orEmpty().distinct()
                     add(
                         Event(
                             id = "api-${item.getString("external_id")}",
@@ -52,8 +59,8 @@ class ApiEventSource @Inject constructor() : EventSource {
                             address = item.optString("address").ifBlank { item.optString("venue") },
                             latitude = item.getDouble("latitude"),
                             longitude = item.getDouble("longitude"),
-                            sourceUrl = item.optJSONArray("source_urls")?.optString(0).orEmpty()
-                                .ifBlank { BuildConfig.NOWADAYS_API_BASE_URL },
+                            sourceUrl = sourceUrls.firstOrNull() ?: BuildConfig.NOWADAYS_API_BASE_URL,
+                            sourceUrls = sourceUrls.ifEmpty { listOf(BuildConfig.NOWADAYS_API_BASE_URL) },
                             imageUrl = null,
                             organizer = item.optString("source_name").ifBlank { null },
                             price = when (item.optString("price_type", "unknown").lowercase()) {
