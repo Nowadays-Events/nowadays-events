@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -27,6 +29,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -55,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.nowadays.events.R
 import com.nowadays.events.domain.model.TimeFilter
+import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.map.EventMap
 import com.nowadays.events.map.EventMapController
 import com.nowadays.events.presentation.detail.EventDetailSheet
@@ -76,6 +82,7 @@ fun MapScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showCalendar by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val cameraPreferences = remember { context.getSharedPreferences("map_camera", Context.MODE_PRIVATE) }
     val controller = remember {
@@ -166,6 +173,24 @@ fun MapScreen(
                 onCalendarClick = { showCalendar = true },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 44.dp),
             )
+            IconButton(
+                onClick = { showSearch = !showSearch },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 8.dp),
+            ) {
+                Icon(if (showSearch) Icons.Default.Close else Icons.Default.Search, contentDescription = "Rechercher et filtrer")
+            }
+            if (showSearch) {
+                SearchFilters(
+                    query = state.searchQuery,
+                    selectedCategory = state.selectedCategory,
+                    priceFilter = state.priceFilter,
+                    onQueryChanged = viewModel::setSearchQuery,
+                    onCategorySelected = viewModel::selectCategory,
+                    onPriceSelected = viewModel::selectPriceFilter,
+                    onClear = viewModel::clearContentFilters,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp, start = 12.dp, end = 12.dp),
+                )
+            }
             if (state.isExploringGroup) {
                 val transition = rememberInfiniteTransition(label = "group back pulse")
                 val arrowAlpha by transition.animateFloat(
@@ -204,6 +229,68 @@ fun MapScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SearchFilters(
+    query: String,
+    selectedCategory: EventCategory?,
+    priceFilter: EventPriceFilter,
+    onQueryChanged: (String) -> Unit,
+    onCategorySelected: (EventCategory?) -> Unit,
+    onPriceSelected: (EventPriceFilter) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, tonalElevation = 5.dp, shadowElevation = 6.dp) {
+        Column(Modifier.padding(12.dp)) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChanged,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                placeholder = { Text("Événement, lieu, ville…") },
+                trailingIcon = if (query.isNotEmpty()) {{
+                    IconButton(onClick = { onQueryChanged("") }) { Icon(Icons.Default.Close, contentDescription = "Effacer la recherche") }
+                }} else null,
+            )
+            LazyRow(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                item { AssistChip(onClick = { onCategorySelected(null) }, label = { Text(if (selectedCategory == null) "✓ Toutes" else "Toutes") }) }
+                items(EventCategory.entries) { category ->
+                    AssistChip(
+                        onClick = { onCategorySelected(category) },
+                        label = { Text(if (selectedCategory == category) "✓ ${categoryLabel(category)}" else categoryLabel(category)) },
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
+            LazyRow(Modifier.fillMaxWidth()) {
+                items(listOf(
+                    EventPriceFilter.ALL to "Tous tarifs",
+                    EventPriceFilter.FREE to "Gratuit",
+                    EventPriceFilter.PAID to "Payant",
+                )) { (filter, label) ->
+                    AssistChip(
+                        onClick = { onPriceSelected(filter) },
+                        label = { Text(if (priceFilter == filter) "✓ $label" else label) },
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                }
+                item { TextButton(onClick = onClear) { Text("Réinitialiser") } }
+            }
+        }
+    }
+}
+
+private fun categoryLabel(category: EventCategory): String = when (category) {
+    EventCategory.CULTURE -> "Culture"
+    EventCategory.MUSIC -> "Musique"
+    EventCategory.SPORT -> "Sport"
+    EventCategory.FOOD -> "Gastronomie"
+    EventCategory.FAMILY -> "Famille"
+    EventCategory.COMMUNITY -> "Vie locale"
+    EventCategory.TECHNOLOGY -> "Technologie"
 }
 
 private fun recenterOnLastKnownLocation(context: Context, controller: EventMapController) {

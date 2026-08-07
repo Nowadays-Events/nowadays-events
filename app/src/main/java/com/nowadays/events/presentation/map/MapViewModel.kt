@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.nowadays.events.domain.model.TimeFilter
 import com.nowadays.events.domain.model.AttendanceResponse
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventCategory
+import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.repository.EventRepository
 import com.nowadays.events.domain.usecase.EventTimeFilters
 import com.nowadays.events.domain.usecase.EventFamilyGrouper
@@ -31,6 +33,9 @@ class MapViewModel @Inject constructor(
     private val expandedMainEventId = MutableStateFlow<String?>(null)
     private val customDateRange = MutableStateFlow<Pair<LocalDate, LocalDate>?>(null)
     private val expandedClusterEventIds = MutableStateFlow<Set<String>>(emptySet())
+    private val searchQuery = MutableStateFlow("")
+    private val selectedCategory = MutableStateFlow<EventCategory?>(null)
+    private val priceFilter = MutableStateFlow(EventPriceFilter.ALL)
     private data class FilterSelection(
         val filter: TimeFilter,
         val range: Pair<LocalDate, LocalDate>?,
@@ -39,21 +44,43 @@ class MapViewModel @Inject constructor(
     private val filterSelection = combine(selectedFilter, customDateRange, expandedClusterEventIds) { filter, range, clusterIds ->
         FilterSelection(filter, range, clusterIds)
     }
+    private data class ContentFilters(
+        val query: String,
+        val category: EventCategory?,
+        val price: EventPriceFilter,
+    )
+    private val contentFilters = combine(searchQuery, selectedCategory, priceFilter, ::ContentFilters)
 
     private val attendance = selectedEventId.flatMapLatest { eventId ->
         eventId?.let(repository::observeAttendance) ?: flowOf(AttendanceResponse.NONE)
     }
 
-    val uiState = combine(repository.observeEvents(), filterSelection, selectedEventId, attendance, expandedMainEventId) { events, filterSelection, selectedId, response, expandedMainId ->
+    private data class Selection(val eventId: String?, val attendance: AttendanceResponse, val expandedMainId: String?)
+    private val selection = combine(selectedEventId, attendance, expandedMainEventId, ::Selection)
+
+    val uiState = combine(repository.observeEvents(), filterSelection, contentFilters, selection) { events, filterSelection, content, selection ->
         val filter = filterSelection.filter
         val customRange = filterSelection.range
-        val filtered = if (filter == TimeFilter.CUSTOM && customRange != null) {
+        val dateFiltered = if (filter == TimeFilter.CUSTOM && customRange != null) {
             filters.apply(events, customRange.first, customRange.second)
         } else filters.apply(events, filter)
+        val query = content.query.trim().lowercase()
+        val filtered = dateFiltered.filter { event ->
+            (content.category == null || event.category == content.category) &&
+                when (content.price) {
+                    EventPriceFilter.ALL -> true
+                    EventPriceFilter.FREE -> event.price is EventPrice.Free
+                    EventPriceFilter.PAID -> event.price is EventPrice.Paid
+                } &&
+                (query.isEmpty() || listOfNotNull(
+                    event.title, event.shortDescription, event.fullDescription,
+                    event.venueName, event.address, event.organizer,
+                ).any { it.lowercase().contains(query) })
+        }
         val families = EventFamilyGrouper.group(filtered)
-        val expandedFamily = families.firstOrNull { it.main.id == expandedMainId }
+        val expandedFamily = families.firstOrNull { it.main.id == selection.expandedMainId }
         val visible = expandedFamily?.events ?: families.map { it.main }
-        val selected = events.firstOrNull { it.id == selectedId }
+        val selected = events.firstOrNull { it.id == selection.eventId }
         val selectedFamily = selected?.let { event -> families.firstOrNull { family -> family.events.any { it.id == event.id } } }
         val related = selectedFamily?.events.orEmpty()
         MapUiState(
@@ -61,6 +88,9 @@ class MapViewModel @Inject constructor(
             customStartDate = customRange?.first,
             customEndDate = customRange?.second,
             dataUpdatedAt = events.maxOfOrNull(Event::updatedAt),
+            searchQuery = content.query,
+            selectedCategory = content.category,
+            priceFilter = content.price,
             events = visible,
             selectedEvent = selected,
             relatedEvents = related,
@@ -73,7 +103,7 @@ class MapViewModel @Inject constructor(
             expandedClusterEventIds = filterSelection.expandedClusterIds.intersect(visible.map(Event::id).toSet()),
             selectedFamilyEventIds = selectedFamily?.events?.map(Event::id).orEmpty(),
             selectedSourceUrls = selectedFamily?.sourceUrls.orEmpty(),
-            attendanceResponse = response,
+            attendanceResponse = selection.attendance,
             isLoading = false,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
@@ -94,6 +124,14 @@ class MapViewModel @Inject constructor(
     }
 
     fun expandCluster(eventIds: Set<String>) { expandedClusterEventIds.value = eventIds }
+    fun setSearchQuery(value: String) { searchQuery.value = value }
+    fun selectCategory(category: EventCategory?) { selectedCategory.value = category }
+    fun selectPriceFilter(filter: EventPriceFilter) { priceFilter.value = filter }
+    fun clearContentFilters() {
+        searchQuery.value = ""
+        selectedCategory.value = null
+        priceFilter.value = EventPriceFilter.ALL
+    }
     fun clearMapSelection() {
         selectedEventId.value = null
         expandedClusterEventIds.value = emptySet()

@@ -11,6 +11,9 @@ data class MapUiState(
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
     val dataUpdatedAt: Instant? = null,
+    val searchQuery: String = "",
+    val selectedCategory: com.nowadays.events.domain.model.EventCategory? = null,
+    val priceFilter: EventPriceFilter = EventPriceFilter.ALL,
     val events: List<Event> = emptyList(),
     val selectedEvent: Event? = null,
     val relatedEvents: List<Event> = emptyList(),
@@ -26,3 +29,5 @@ data class MapUiState(
     val attendanceResponse: AttendanceResponse = AttendanceResponse.NONE,
     val isLoading: Boolean = true,
 )
+
+enum class EventPriceFilter { ALL, FREE, PAID }
