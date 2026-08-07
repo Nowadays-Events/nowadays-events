@@ -116,14 +116,14 @@ fun EventDetailSheet(
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        sourceUrls.forEachIndexed { index, url ->
+                        sourceUrls.forEach { url ->
                             TextButton(
                                 onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Icon(Icons.Default.Link, null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Ouvrir la source ${index + 1}", modifier = Modifier.fillMaxWidth())
+                                Text("Ouvrir ${sourceLabel(url)}", modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -191,7 +191,8 @@ fun EventDetailSheet(
                     TextButton(
                         onClick = {
                             val subject = "[Nowly Events] Signalement : ${event.title}"
-                            val body = "Motif : $reason\n\nÉvénement : ${event.title}\nDate : ${date.format(event.startsAt)}\nSource : ${event.sourceUrl}\nIdentifiant : ${event.id}\n\nPrécisions : "
+                            val sources = sourceUrls.distinct().joinToString("\n") { "- $it" }
+                            val body = "Motif : $reason\n\nÉvénement : ${event.title}\nDate : ${date.format(event.startsAt)}\nSources :\n$sources\nIdentifiant : ${event.id}\n\nPrécisions : "
                             val uri = Uri.parse("mailto:vincent.delporte84@outlook.fr").buildUpon()
                                 .appendQueryParameter("subject", subject)
                                 .appendQueryParameter("body", body)
@@ -215,6 +216,10 @@ fun EventDetailSheet(
 }
 
 private fun EventCategory.label() = name.lowercase().replaceFirstChar(Char::uppercase)
+private fun sourceLabel(url: String): String = runCatching {
+    Uri.parse(url).host?.removePrefix("www.")?.takeIf(String::isNotBlank)
+}.getOrNull() ?: "la source"
+
 private fun priceLabel(price: EventPrice): String = when (price) {
     EventPrice.Unknown -> "Tarif non renseigné"
     EventPrice.Free -> "Gratuit"
