@@ -30,16 +30,16 @@ jobs:
       - name: Prepare downloadable files
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/nowadays-events-${GITHUB_REF_NAME}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release/nowly-events-${GITHUB_REF_NAME}.apk
           cd release
-          sha256sum nowadays-events-${GITHUB_REF_NAME}.apk > nowadays-events-${GITHUB_REF_NAME}.apk.sha256
+          sha256sum nowly-events-${GITHUB_REF_NAME}.apk > nowly-events-${GITHUB_REF_NAME}.apk.sha256
 
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           printf '%s\n' \
-            'Version de test Android de Nowadays Events.' \
+            'Version de test Android de Nowly Events.' \
             '' \
             'Installation : télécharger le fichier APK sur le téléphone, puis autoriser ponctuellement l’installation depuis le navigateur.' \
             '' \
@@ -49,5 +49,5 @@ jobs:
             release/*.apk release/*.sha256 \
             --verify-tag \
             --prerelease \
-            --title "Nowadays Events — test ${GITHUB_REF_NAME#test-v}" \
+            --title "Nowly Events — test ${GITHUB_REF_NAME#test-v}" \
             --notes-file release-notes.md

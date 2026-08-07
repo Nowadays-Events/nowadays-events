@@ -25,7 +25,7 @@ class ApiEventSource @Inject constructor() : EventSource {
             connection.readTimeout = 10_000
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/json")
-            check(connection.responseCode in 200..299) { "Nowadays API HTTP ${connection.responseCode}" }
+            check(connection.responseCode in 200..299) { "Nowly Events API HTTP ${connection.responseCode}" }
             val root = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             val array = root.optJSONArray("events") ?: return@withContext emptyList()
             buildList {

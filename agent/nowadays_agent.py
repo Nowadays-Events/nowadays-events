@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collecteur local Nowadays, sans dépendance externe.
+"""Collecteur local Nowly Events, sans dépendance externe.
 
 Il extrait les objets schema.org/Event JSON-LD, conserve leur historique dans
 SQLite, rapproche les doublons et exporte un flux JSON consommable par une API
@@ -29,7 +29,7 @@ from urllib.parse import urljoin
 
 from provider_sources import MissingCredentials, collect_api_source
 
-USER_AGENT = "NowadaysEventAgent/0.1 (+local prototype)"
+USER_AGENT = "NowlyEventsAgent/0.1 (+local prototype)"
 CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled")
 POSTPONED_TOKENS = ("reporté", "reporte", "postponed", "rescheduled")
 

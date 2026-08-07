@@ -1,4 +1,4 @@
-# Nowadays Events
+# Nowly Events
 
 MVP Android de découverte d’événements géolocalisés. Les étapes 2 à 7 sont présentes : socle Android, données locales, filtres, carte MapLibre clusterisée, fiche détaillée, affluence anonyme, formulaire manuel et synchronisation extensible.
 

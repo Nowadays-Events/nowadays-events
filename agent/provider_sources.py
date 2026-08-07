@@ -9,7 +9,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-USER_AGENT = "NowadaysEventAgent/0.2 (+https://github.com/Nowadays-Events/nowadays-events)"
+USER_AGENT = "NowlyEventsAgent/0.2 (+https://github.com/Nowadays-Events/nowadays-events)"
 
 
 class MissingCredentials(RuntimeError):
