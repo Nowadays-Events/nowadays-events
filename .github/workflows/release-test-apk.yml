@@ -60,7 +60,16 @@ jobs:
           echo "NOWLY_SIGNING_KEY_ALIAS=$SIGNING_KEY_ALIAS" >> "$GITHUB_ENV"
           echo "NOWLY_SIGNING_KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Verify permanent Android signing key
+      - name: Verify Android signing store password
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        run: >-
+          keytool -list
+          -keystore "$RUNNER_TEMP/nowly-events-release.jks"
+          -storepass "$SIGNING_STORE_PASSWORD"
+          > /dev/null
+
+      - name: Verify Android signing key alias
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
