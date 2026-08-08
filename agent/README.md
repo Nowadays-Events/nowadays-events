@@ -1,11 +1,11 @@
-# Agent local Nowly Events
+# Agent local Xymis Events
 
 Ce prototype collecte les événements structurés `schema.org/Event`, limite les
 résultats à 50 km de Mont-de-Marsan, fusionne les doublons, conserve toutes les
 URL sources et détecte les statuts d’annulation publiés par les organisateurs.
 
 Il n’écrit jamais directement dans la base du téléphone. Il produit
-`output/events.json`, futur contrat entre le collecteur et l’API Nowly Events.
+`output/events.json`, futur contrat entre le collecteur et l’API Xymis Events.
 
 ## Exécution
 

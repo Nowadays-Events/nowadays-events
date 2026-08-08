@@ -34,7 +34,7 @@ class EventLinkImporter @Inject constructor() {
         runCatching {
             val uri = validatePublicUrl(url)
             val document = Jsoup.connect(uri.toString())
-                .userAgent("NowlyEvents/1.0 (event preview)")
+                .userAgent("XymisEvents/1.0 (event preview)")
                 .timeout(12_000)
                 .maxBodySize(2_000_000)
                 .followRedirects(true)

@@ -56,7 +56,7 @@ fun EventFormScreen(onBack: () -> Unit, onSaved: (Double, Double) -> Unit, viewM
             ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Gagner du temps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Collez le lien d’une page d’événement : Nowly Events tente d’en extraire le titre, la date et le lieu.")
+                    Text("Collez le lien d’une page d’événement : Xymis Events tente d’en extraire le titre, la date et le lieu.")
                     FormField("Lien de l’événement", state.importUrl, null, KeyboardType.Uri) {
                         viewModel.update(EventFormField.IMPORT_URL, it)
                     }

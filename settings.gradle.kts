@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NowlyEvents"
+rootProject.name = "XymisEvents"
 include(":app")

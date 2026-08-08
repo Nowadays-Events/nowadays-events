@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""API HTTP locale en lecture seule pour le flux Nowly Events."""
+"""API HTTP locale en lecture seule pour le flux Xymis Events."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def main() -> None:
     args = parser.parse_args()
     EventsHandler.feed_path = args.feed
     server = ThreadingHTTPServer((args.host, args.port), EventsHandler)
-    print(f"Nowly Events API listening on http://{args.host}:{args.port}", flush=True)
+    print(f"Xymis Events API listening on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()
 
 

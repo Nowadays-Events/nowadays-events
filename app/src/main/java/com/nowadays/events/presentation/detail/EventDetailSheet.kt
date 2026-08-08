@@ -190,7 +190,7 @@ fun EventDetailSheet(
                 ).forEach { reason ->
                     TextButton(
                         onClick = {
-                            val subject = "[Nowly Events] Signalement : ${event.title}"
+                            val subject = "[Xymis Events] Signalement : ${event.title}"
                             val sources = sourceUrls.distinct().joinToString("\n") { "- $it" }
                             val body = "Motif : $reason\n\nÉvénement : ${event.title}\nDate : ${date.format(event.startsAt)}\nSources :\n$sources\nIdentifiant : ${event.id}\n\nPrécisions : "
                             val uri = Uri.parse("mailto:vincent.delporte84@outlook.fr").buildUpon()
