@@ -22,7 +22,27 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Prepare permanent Android signing key
+      - name: Check ANDROID_SIGNING_KEY_BASE64
+        env:
+          VALUE: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+        run: test -n "$VALUE"
+
+      - name: Check ANDROID_SIGNING_STORE_PASSWORD
+        env:
+          VALUE: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        run: test -n "$VALUE"
+
+      - name: Check ANDROID_SIGNING_KEY_ALIAS
+        env:
+          VALUE: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+        run: test -n "$VALUE"
+
+      - name: Check ANDROID_SIGNING_KEY_PASSWORD
+        env:
+          VALUE: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: test -n "$VALUE"
+
+      - name: Decode permanent Android signing key
         shell: bash
         env:
           SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
@@ -30,20 +50,26 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
-          missing=()
-          [[ -z "$SIGNING_KEY_BASE64" ]] && missing+=("ANDROID_SIGNING_KEY_BASE64")
-          [[ -z "$SIGNING_STORE_PASSWORD" ]] && missing+=("ANDROID_SIGNING_STORE_PASSWORD")
-          [[ -z "$SIGNING_KEY_ALIAS" ]] && missing+=("ANDROID_SIGNING_KEY_ALIAS")
-          [[ -z "$SIGNING_KEY_PASSWORD" ]] && missing+=("ANDROID_SIGNING_KEY_PASSWORD")
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error title=Secrets de signature manquants::Ajouter dans GitHub Actions : ${missing[*]}"
+          if ! printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/nowly-events-release.jks"; then
+            echo "::error title=Clé de signature invalide::ANDROID_SIGNING_KEY_BASE64 ne contient pas un Base64 valide."
             exit 1
           fi
-          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/nowly-events-release.jks"
+          test -s "$RUNNER_TEMP/nowly-events-release.jks"
           echo "NOWLY_SIGNING_STORE_FILE=$RUNNER_TEMP/nowly-events-release.jks" >> "$GITHUB_ENV"
           echo "NOWLY_SIGNING_STORE_PASSWORD=$SIGNING_STORE_PASSWORD" >> "$GITHUB_ENV"
           echo "NOWLY_SIGNING_KEY_ALIAS=$SIGNING_KEY_ALIAS" >> "$GITHUB_ENV"
           echo "NOWLY_SIGNING_KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Verify permanent Android signing key
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+        run: >-
+          keytool -list
+          -keystore "$RUNNER_TEMP/nowly-events-release.jks"
+          -storepass "$SIGNING_STORE_PASSWORD"
+          -alias "$SIGNING_KEY_ALIAS"
+          > /dev/null
 
       - name: Run tests and build APK
         run: |
