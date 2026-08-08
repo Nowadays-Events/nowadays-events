@@ -30,8 +30,13 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
-          if [[ -z "$SIGNING_KEY_BASE64" || -z "$SIGNING_STORE_PASSWORD" || -z "$SIGNING_KEY_ALIAS" || -z "$SIGNING_KEY_PASSWORD" ]]; then
-            echo "Les secrets de signature Android permanente ne sont pas configurés." >&2
+          missing=()
+          [[ -z "$SIGNING_KEY_BASE64" ]] && missing+=("ANDROID_SIGNING_KEY_BASE64")
+          [[ -z "$SIGNING_STORE_PASSWORD" ]] && missing+=("ANDROID_SIGNING_STORE_PASSWORD")
+          [[ -z "$SIGNING_KEY_ALIAS" ]] && missing+=("ANDROID_SIGNING_KEY_ALIAS")
+          [[ -z "$SIGNING_KEY_PASSWORD" ]] && missing+=("ANDROID_SIGNING_KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Secrets de signature manquants::Ajouter dans GitHub Actions : ${missing[*]}"
             exit 1
           fi
           printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/nowly-events-release.jks"
