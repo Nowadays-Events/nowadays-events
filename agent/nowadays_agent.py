@@ -525,6 +525,14 @@ def run(
                 candidates = [event for node in nodes if (event := event_from_json(node, source["name"], node.get("url", "")))]
             source_reachable = True
             source_candidate_count = len(candidates)
+            minimum_candidates = int(source.get("min_candidates", 0))
+            if source_candidate_count < minimum_candidates:
+                source_failure_count += 1
+                source_status = "degraded"
+                failures.append(
+                    f"{source['name']}: seulement {source_candidate_count} candidat(s), "
+                    f"minimum attendu {minimum_candidates}"
+                )
             accepted = [event for event in candidates
                 if distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius]
             source_accepted_count = len(accepted)

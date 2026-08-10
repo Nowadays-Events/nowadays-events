@@ -89,6 +89,17 @@ class NowadaysAgentTests(unittest.TestCase):
             self.assertEqual("incomplete", payload["candidates"][0]["review_status"])
             self.assertIn("startDate", payload["candidates"][0]["missing_fields"])
 
+    def test_roquefort_events_are_kept_as_curated_fallback(self):
+        config_path = Path(__file__).with_name("config.json")
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        roquefort = [
+            item for item in config["curated_events"]
+            if "roquefort" in item.get("name", "").lower()
+        ]
+        self.assertGreaterEqual(len(roquefort), 3)
+        self.assertTrue(all(item.get("startDate", "").startswith("2026-08-") for item in roquefort))
+        self.assertTrue(all(item.get("location", {}).get("geo") for item in roquefort))
+
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """
         <a href="/agenda/concert-1">Concert</a>
