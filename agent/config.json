@@ -43,6 +43,15 @@
       "max_detail_pages": 30
     },
     {
+      "name": "Landes d'Armagnac Tourisme — agenda officiel",
+      "type": "jsonld",
+      "priority": 100,
+      "trust": "official",
+      "url": "https://www.tourisme-landesdarmagnac.fr/voir-faire/agenda",
+      "min_candidates": 1,
+      "max_detail_pages": 50
+    },
+    {
       "name": "Ville de Saint-Sever",
       "type": "jsonld",
       "priority": 100,

@@ -100,6 +100,17 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertTrue(all(item.get("startDate", "").startswith("2026-08-") for item in roquefort))
         self.assertTrue(all(item.get("location", {}).get("geo") for item in roquefort))
 
+    def test_armagnac_has_an_independent_official_source(self):
+        config_path = Path(__file__).with_name("config.json")
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        armagnac_hosts = {
+            source["url"].split("/")[2]
+            for source in config["sources"]
+            if "armagnac" in source["name"].lower()
+        }
+        self.assertIn("www.tourisme-landesdarmagnac.fr", armagnac_hosts)
+        self.assertIn("www.tourismelandes.com", armagnac_hosts)
+
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """
         <a href="/agenda/concert-1">Concert</a>
