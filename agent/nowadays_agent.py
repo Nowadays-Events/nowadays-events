@@ -478,9 +478,18 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
         return 0
     payload = json.loads(feed_path.read_text(encoding="utf-8"))
     hydrated = 0
+    history_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     for item in payload.get("events", []):
         required = ("external_id", "title", "start_at", "end_at", "latitude", "longitude")
         if any(item.get(key) is None for key in required):
+            continue
+        try:
+            previous_end = datetime.fromisoformat(str(item["end_at"]).replace("Z", "+00:00"))
+            if previous_end.tzinfo is None:
+                previous_end = previous_end.replace(tzinfo=timezone.utc)
+            if previous_end < history_cutoff:
+                continue
+        except ValueError:
             continue
         connection.execute(
             """

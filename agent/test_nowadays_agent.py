@@ -198,6 +198,21 @@ class NowadaysAgentTests(unittest.TestCase):
             self.assertEqual(1, mark_unverified(database, "2026-08-06T10:00:00+00:00"))
             self.assertEqual("unverified", database.execute("SELECT status FROM events").fetchone()[0])
 
+    def test_previous_feed_drops_obviously_stale_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            feed = Path(directory) / "previous.json"
+            feed.write_text(json.dumps({"events": [{
+                "external_id": "bad-year", "title": "Date mal interprétée", "description": "",
+                "start_at": "2014-08-11T00:00:00+00:00", "end_at": "2014-08-11T00:00:00+00:00",
+                "venue": "", "address": "Roquefort", "latitude": 44.03, "longitude": -0.32,
+                "status": "unverified", "fingerprint": "old-fingerprint",
+                "source_urls": ["https://example.org/old"],
+            }]}), encoding="utf-8")
+            database = sqlite3.connect(":memory:")
+            database.executescript(SCHEMA)
+            self.assertEqual(0, hydrate_previous_feed(database, feed))
+            self.assertEqual(0, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
 
 if __name__ == "__main__":
     unittest.main()
