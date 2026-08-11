@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_events, hydrate_previous_feed, mark_unverified, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, mark_unverified, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -110,6 +110,28 @@ class NowadaysAgentTests(unittest.TestCase):
         }
         self.assertIn("www.tourisme-landesdarmagnac.fr", armagnac_hosts)
         self.assertIn("www.tourismelandes.com", armagnac_hosts)
+
+    def test_extracts_armagnac_html_period_address_and_coordinates(self):
+        body = '''
+        <h1 class="title"><span>Fêtes de Roquefort</span></h1>
+        <img src="map?center=44.03466+-0.32175&amp;zoom=11">
+        <div class="detailManifDates">
+          <span class="manif-date-day">Du mercredi</span>
+          <span class="manif-date-day-num">12</span>
+          <span class="manif-date-month">août</span>
+          <span class="manif-date-to">au 16 août 2026</span>
+        </div>
+        <div class="detailManifType"><ul><li>Divertissement</li></ul></div>
+        <table><tr class="address"><td>Adresse</td><td>40120 Roquefort</td></tr></table>
+        <div class="detailDescriptionManif">Cavalcade<br>et fête foraine.</div>
+        '''
+        event = extract_armagnac_event(body, "Landes d'Armagnac", "https://example.org/agenda/1")
+        self.assertIsNotNone(event)
+        self.assertEqual("Fêtes de Roquefort", event.title)
+        self.assertEqual("2026-08-12T00:00:00+00:00", event.start_at)
+        self.assertEqual("2026-08-16T23:59:00+00:00", event.end_at)
+        self.assertEqual((44.03466, -0.32175), (event.latitude, event.longitude))
+        self.assertIn("40120 Roquefort", event.address)
 
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """

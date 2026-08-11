@@ -44,7 +44,7 @@
     },
     {
       "name": "Landes d'Armagnac Tourisme — agenda officiel",
-      "type": "jsonld",
+      "type": "armagnac_html",
       "priority": 100,
       "trust": "official",
       "url": "https://www.tourisme-landesdarmagnac.fr/voir-faire/agenda",

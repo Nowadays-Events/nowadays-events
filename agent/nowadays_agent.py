@@ -275,6 +275,90 @@ def extract_events(body: str, source_name: str, page_url: str) -> list[Event]:
     return list(unique.values())
 
 
+FRENCH_MONTHS = {
+    "janv": 1, "janvier": 1, "fevr": 2, "fevrier": 2, "mars": 3,
+    "avr": 4, "avril": 4, "mai": 5, "juin": 6, "juil": 7, "juillet": 7,
+    "aout": 8, "sept": 9, "septembre": 9, "oct": 10, "octobre": 10,
+    "nov": 11, "novembre": 11, "dec": 12, "decembre": 12,
+}
+
+
+def html_fragment_text(fragment: str) -> str:
+    value = re.sub(r"<br\s*/?>", "\n", fragment, flags=re.IGNORECASE)
+    value = re.sub(r"<[^>]+>", " ", value)
+    return re.sub(r"[ \t\r\f\v]+", " ", html.unescape(value)).strip()
+
+
+def class_fragment(body: str, class_name: str, tag: str = r"(?:div|span|td)") -> str:
+    match = re.search(
+        rf'<{tag}\b[^>]*class=["\'][^"\']*\b{re.escape(class_name)}\b[^"\']*["\'][^>]*>(.*?)</{tag.split("|")[0].replace("(?:", "")}>',
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1) if match else ""
+
+
+def french_month(value: str) -> int | None:
+    key = normalize(value).replace(" ", "")[:4]
+    return FRENCH_MONTHS.get(key) or FRENCH_MONTHS.get(normalize(value))
+
+
+def extract_armagnac_event(body: str, source_name: str, page_url: str) -> Event | None:
+    """Extrait les fiches Tourinsoft de l'agenda Landes d'Armagnac sans JSON-LD."""
+    title_match = re.search(r'<h1\b[^>]*>(.*?)</h1>', body, flags=re.IGNORECASE | re.DOTALL)
+    latitude_match = re.search(r'(?:center=|\blat\s*:)\s*([+-]?\d{2}\.\d+)', body, flags=re.IGNORECASE)
+    longitude_match = re.search(r'(?:center=[^&"\']*\+|\blng\s*:)\s*(-?\d+\.\d+)', body, flags=re.IGNORECASE)
+    date_block = class_fragment(body, "detailManifDates")
+    if not title_match or not latitude_match or not longitude_match or not date_block:
+        return None
+
+    day_match = re.search(r'class=["\'][^"\']*manif-date-day-num[^"\']*["\'][^>]*>\s*(\d{1,2})', date_block, re.IGNORECASE)
+    month_match = re.search(r'class=["\'][^"\']*manif-date-month[^"\']*["\'][^>]*>\s*([^<]+)', date_block, re.IGNORECASE)
+    to_match = re.search(r'class=["\'][^"\']*manif-date-to[^"\']*["\'][^>]*>\s*au\s+(\d{1,2})\s+([^<\d]+?)\s+(20\d{2})', date_block, re.IGNORECASE)
+    if not day_match or not month_match:
+        return None
+    start_month = french_month(month_match.group(1))
+    year_match = re.search(r'\b(20\d{2})\b', date_block) or re.search(r'\b(20\d{2})\b', body)
+    year = int(to_match.group(3)) if to_match else int(year_match.group(1)) if year_match else datetime.now().year
+    if start_month is None:
+        return None
+    start = datetime(year, start_month, int(day_match.group(1)), tzinfo=timezone.utc)
+    if to_match:
+        end_month = french_month(to_match.group(2))
+        if end_month is None:
+            return None
+        end = datetime(int(to_match.group(3)), end_month, int(to_match.group(1)), 23, 59, tzinfo=timezone.utc)
+    else:
+        end = start
+
+    address_row = re.search(r'<tr\b[^>]*class=["\'][^"\']*\baddress\b[^"\']*["\'][^>]*>(.*?)</tr>', body, re.IGNORECASE | re.DOTALL)
+    address = html_fragment_text(address_row.group(1)) if address_row else ""
+    address = re.sub(r"^Adresse\s*", "", address, flags=re.IGNORECASE).strip()
+    description = html_fragment_text(class_fragment(body, "detailDescriptionManif"))
+    categories = html_fragment_text(class_fragment(body, "detailManifType"))
+    node = {
+        "@type": "Event",
+        "name": html_fragment_text(title_match.group(1)),
+        "description": description,
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "url": page_url,
+        "category": categories,
+        "location": {
+            "@type": "Place",
+            "name": address.split(" ", 1)[-1] if address else "Landes d'Armagnac",
+            "address": address,
+            "geo": {
+                "latitude": latitude_match.group(1),
+                "longitude": longitude_match.group(1),
+            },
+        },
+    }
+    if re.search(r"\bgratuit\b", body, re.IGNORECASE):
+        node["offers"] = {"price": 0, "priceCurrency": "EUR"}
+    return event_from_json(node, source_name, page_url)
+
+
 def fetch(url: str, timeout: int = 20) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -506,7 +590,7 @@ def run(
         try:
             source_type = source.get("type", "jsonld")
             timeout = min(20, max(1, int(deadline - time.monotonic())))
-            if source_type == "jsonld":
+            if source_type in ("jsonld", "armagnac_html"):
                 body = fetch(source["url"], timeout=timeout)
                 candidates = extract_events(body, source["name"], source["url"])
                 page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
@@ -516,7 +600,13 @@ def run(
                         break
                     try:
                         timeout = min(20, max(1, int(deadline - time.monotonic())))
-                        candidates.extend(extract_events(fetch(detail_url, timeout=timeout), source["name"], detail_url))
+                        detail_body = fetch(detail_url, timeout=timeout)
+                        if source_type == "armagnac_html":
+                            event = extract_armagnac_event(detail_body, source["name"], detail_url)
+                            if event:
+                                candidates.append(event)
+                        else:
+                            candidates.extend(extract_events(detail_body, source["name"], detail_url))
                     except Exception as error:
                         source_failure_count += 1
                         failures.append(f"{source['name']} ({detail_url}): {error}")
