@@ -318,7 +318,9 @@ def extract_armagnac_event(body: str, source_name: str, page_url: str) -> Event 
     if not day_match or not month_match:
         return None
     start_month = french_month(month_match.group(1))
-    year_match = re.search(r'\b(20\d{2})\b', date_block) or re.search(r'\b(20\d{2})\b', body)
+    year_match = re.search(r'\b(20\d{2})\b', date_block)
+    # Les pages contiennent aussi l'année de création du site dans leur pied de
+    # page (2014). Elle ne doit jamais servir d'année à une date d'événement.
     year = int(to_match.group(3)) if to_match else int(year_match.group(1)) if year_match else datetime.now().year
     if start_month is None:
         return None

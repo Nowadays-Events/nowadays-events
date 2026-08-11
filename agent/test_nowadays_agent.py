@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, mark_unverified, persist
@@ -132,6 +133,22 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("2026-08-16T23:59:00+00:00", event.end_at)
         self.assertEqual((44.03466, -0.32175), (event.latitude, event.longitude))
         self.assertIn("40120 Roquefort", event.address)
+
+    def test_armagnac_single_date_ignores_footer_year(self):
+        body = '''
+        <h1>Marché gourmand</h1>
+        <img src="map?center=43.96979+-0.18539&amp;zoom=11">
+        <div class="detailManifDates">
+          <span class="manif-date-day">mardi</span>
+          <span class="manif-date-day-num">11</span>
+          <span class="manif-date-month">août</span>
+        </div>
+        <tr class="address"><td>Adresse</td><td>40240 Labastide-d'Armagnac</td></tr>
+        <footer>Office créé en 2014</footer>
+        '''
+        event = extract_armagnac_event(body, "Landes d'Armagnac", "https://example.org/agenda/2")
+        self.assertIsNotNone(event)
+        self.assertEqual(f"{datetime.now().year}-08-11T00:00:00+00:00", event.start_at)
 
     def test_detail_links_are_same_domain_and_bounded(self):
         body = """
