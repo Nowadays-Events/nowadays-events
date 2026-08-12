@@ -68,6 +68,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python agent/manage_reviews.py --candidates agent/output/candidates.json
 
+      - name: Notify administrator about collection health
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python agent/manage_health.py --health agent/output/health.json
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
