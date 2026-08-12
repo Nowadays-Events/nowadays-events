@@ -53,6 +53,9 @@ jobs:
           EVENTBRITE_ORGANIZATION_IDS: ${{ secrets.EVENTBRITE_ORGANIZATION_IDS }}
         run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
 
+      - name: Validate public feed
+        run: python agent/validate_feed.py --feed agent/output/events.json --minimum-events 10
+
       - name: Build public feed
         run: |
           mkdir -p _site
