@@ -41,11 +41,17 @@ def issue_body(payload: dict, sources: list[dict], identifier: str) -> str:
             f"{source.get('failures', 0)} erreur(s)"
         )
     details = "\n".join(lines) or "- Aucune source détaillée"
+    failures = payload.get("failures") or []
+    failure_details = "\n".join(f"- `{failure}`" for failure in failures) or "- Aucun message détaillé"
     return f"""## Alerte de collecte Xymis Events
 
 Le flux a été produit, mais une ou plusieurs sources sont dégradées.
 
 {details}
+
+### Erreurs détaillées
+
+{failure_details}
 
 - **État global :** {payload.get('status', 'inconnu')}
 - **Dernière collecte :** {payload.get('generated_at', 'inconnue')}

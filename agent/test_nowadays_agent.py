@@ -110,7 +110,7 @@ class NowadaysAgentTests(unittest.TestCase):
             if "armagnac" in source["name"].lower()
         }
         self.assertIn("www.tourisme-landesdarmagnac.fr", armagnac_hosts)
-        self.assertIn("www.tourismelandes.com", armagnac_hosts)
+        self.assertNotIn("www.tourismelandes.com", armagnac_hosts)
 
     def test_mont_de_marsan_source_crawls_several_list_pages(self):
         config_path = Path(__file__).with_name("config.json")

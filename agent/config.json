@@ -68,15 +68,6 @@
       "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/",
       "min_candidates": 1,
       "max_detail_pages": 30
-    },
-    {
-      "name": "Landes d'Armagnac Tourisme",
-      "type": "jsonld",
-      "priority": 95,
-      "trust": "official",
-      "url": "https://www.tourismelandes.com/preparer-mon-sejour/agenda/agenda-landes/agenda-sur-le-territoire-de-larmagnac/",
-      "min_candidates": 1,
-      "max_detail_pages": 30
     }
   ],
   "candidate_events": [],

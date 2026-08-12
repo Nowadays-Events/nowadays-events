@@ -22,12 +22,16 @@ class ManageHealthTests(unittest.TestCase):
             "candidates": 0, "accepted_in_radius": 0, "failures": 1,
         }]
         body = issue_body(
-            {"status": "degraded", "generated_at": "2026-08-12T10:00:00Z", "exported": 34},
+            {
+                "status": "degraded", "generated_at": "2026-08-12T10:00:00Z", "exported": 34,
+                "failures": ["Tourisme Landes: minimum attendu 1"],
+            },
             sources, "abc123",
         )
         self.assertIn("Tourisme Landes", body)
         self.assertIn("34", body)
         self.assertIn("xymis-health-incident:abc123", body)
+        self.assertIn("minimum attendu 1", body)
 
 
 if __name__ == "__main__":
