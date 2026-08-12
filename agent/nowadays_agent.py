@@ -605,7 +605,28 @@ def run(
                 body = fetch(source["url"], timeout=timeout)
                 candidates = extract_events(body, source["name"], source["url"])
                 page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
-                for detail_url in detail_links(body, source["url"], page_limit):
+                listing_bodies = [body]
+                for list_page in range(2, int(source.get("list_pages", 1)) + 1):
+                    if time.monotonic() >= deadline:
+                        break
+                    separator = "&" if "?" in source["url"] else "?"
+                    listing_url = f"{source['url']}{separator}listpage={list_page}"
+                    try:
+                        timeout = min(20, max(1, int(deadline - time.monotonic())))
+                        listing_bodies.append(fetch(listing_url, timeout=timeout))
+                    except Exception as error:
+                        source_failure_count += 1
+                        failures.append(f"{source['name']} (liste {list_page}): {error}")
+                source_detail_links: list[str] = []
+                for listing_body in listing_bodies:
+                    for detail_url in detail_links(listing_body, source["url"], page_limit):
+                        if detail_url not in source_detail_links:
+                            source_detail_links.append(detail_url)
+                        if len(source_detail_links) >= page_limit:
+                            break
+                    if len(source_detail_links) >= page_limit:
+                        break
+                for detail_url in source_detail_links:
                     if time.monotonic() >= deadline:
                         failures.append(f"{source['name']}: durée maximale atteinte")
                         break

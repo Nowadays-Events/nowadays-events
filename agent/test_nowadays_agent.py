@@ -112,6 +112,13 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertIn("www.tourisme-landesdarmagnac.fr", armagnac_hosts)
         self.assertIn("www.tourismelandes.com", armagnac_hosts)
 
+    def test_mont_de_marsan_source_crawls_several_list_pages(self):
+        config_path = Path(__file__).with_name("config.json")
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        source = next(item for item in config["sources"] if item["name"] == "Mont de Marsan Tourisme")
+        self.assertGreaterEqual(source.get("list_pages", 1), 3)
+        self.assertGreaterEqual(source.get("max_detail_pages", 0), 36)
+
     def test_extracts_armagnac_html_period_address_and_coordinates(self):
         body = '''
         <h1 class="title"><span>Fêtes de Roquefort</span></h1>

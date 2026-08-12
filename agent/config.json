@@ -40,7 +40,8 @@
       "priority": 100,
       "trust": "official",
       "url": "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/",
-      "max_detail_pages": 30
+      "list_pages": 3,
+      "max_detail_pages": 36
     },
     {
       "name": "Landes d'Armagnac Tourisme — agenda officiel",
