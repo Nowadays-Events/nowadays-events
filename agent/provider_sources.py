@@ -6,6 +6,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from urllib.error import HTTPError
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -13,6 +14,10 @@ USER_AGENT = "XymisEventsAgent/0.2 (+https://github.com/Nowadays-Events/nowadays
 
 
 class MissingCredentials(RuntimeError):
+    pass
+
+
+class InvalidCredentials(RuntimeError):
     pass
 
 
@@ -33,8 +38,13 @@ def request_json(
         data = urllib.parse.urlencode(form).encode("utf-8")
         request_headers["Content-Type"] = "application/x-www-form-urlencoded"
     request = urllib.request.Request(url, data=data, headers=request_headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read(8_000_000).decode(response.headers.get_content_charset() or "utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read(8_000_000).decode(response.headers.get_content_charset() or "utf-8"))
+    except HTTPError as error:
+        if error.code in (401, 403):
+            raise InvalidCredentials(f"accès API refusé (HTTP {error.code})") from error
+        raise
 
 
 def localized(value: Any) -> str:

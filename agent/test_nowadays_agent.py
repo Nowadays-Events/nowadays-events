@@ -112,6 +112,15 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertIn("www.tourisme-landesdarmagnac.fr", armagnac_hosts)
         self.assertNotIn("www.tourismelandes.com", armagnac_hosts)
 
+    def test_cloudflare_blocked_tourisme_landes_is_not_a_direct_source(self):
+        config_path = Path(__file__).with_name("config.json")
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        hosts = {
+            source["url"].split("/")[2]
+            for source in config["sources"] if source.get("url", "").startswith("http")
+        }
+        self.assertNotIn("www.tourismelandes.com", hosts)
+
     def test_mont_de_marsan_source_crawls_several_list_pages(self):
         config_path = Path(__file__).with_name("config.json")
         config = json.loads(config_path.read_text(encoding="utf-8"))

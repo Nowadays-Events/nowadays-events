@@ -1,9 +1,17 @@
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 
-from provider_sources import map_eventbrite, map_helloasso, map_openagenda
+from provider_sources import InvalidCredentials, map_eventbrite, map_helloasso, map_openagenda, request_json
 
 
 class ProviderSourceTests(unittest.TestCase):
+    def test_http_403_is_reported_as_invalid_credentials(self):
+        error = HTTPError("https://api.example", 403, "Forbidden", {}, None)
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(InvalidCredentials):
+                request_json("https://api.example")
+
     def test_maps_openagenda_occurrences_and_cancellation(self):
         result = map_openagenda({
             "title": {"fr": "Exposition"},

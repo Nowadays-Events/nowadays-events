@@ -27,7 +27,7 @@ from typing import Any, Iterable
 from urllib.parse import urlsplit, urlunsplit
 from urllib.parse import urljoin
 
-from provider_sources import MissingCredentials, collect_api_source
+from provider_sources import InvalidCredentials, MissingCredentials, collect_api_source
 
 USER_AGENT = "XymisEventsAgent/0.1 (+local prototype)"
 CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled")
@@ -663,6 +663,8 @@ def run(
             source_status = "credentials_missing"
             # Connecteur optionnel encore non configuré : visible dans le rapport,
             # mais il ne dégrade pas les sources déjà opérationnelles.
+        except InvalidCredentials:
+            source_status = "credentials_invalid"
         except Exception as error:  # une source en panne ne bloque pas les autres
             source_failure_count += 1
             source_status = "degraded"
