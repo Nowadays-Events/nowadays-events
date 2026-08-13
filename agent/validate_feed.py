@@ -14,13 +14,27 @@ def parse_datetime(value: object) -> datetime:
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
-def validate(payload: dict, minimum_events: int = 10, now: datetime | None = None) -> list[str]:
+def validate(
+    payload: dict,
+    minimum_events: int = 10,
+    now: datetime | None = None,
+    previous_payload: dict | None = None,
+    minimum_retention_ratio: float = 0.5,
+) -> list[str]:
     errors: list[str] = []
     events = payload.get("events")
     if not isinstance(events, list):
         return ["Le champ events doit être une liste"]
     if len(events) < minimum_events:
         errors.append(f"Seulement {len(events)} événement(s), minimum attendu {minimum_events}")
+    previous_events = (previous_payload or {}).get("events")
+    if isinstance(previous_events, list) and previous_events:
+        minimum_retained = max(minimum_events, int(len(previous_events) * minimum_retention_ratio))
+        if len(events) < minimum_retained:
+            errors.append(
+                f"Chute anormale du flux : {len(events)} événement(s) contre "
+                f"{len(previous_events)} précédemment (minimum toléré {minimum_retained})"
+            )
     reference = now or datetime.now(timezone.utc)
     stale_cutoff = reference - timedelta(days=30)
     identifiers: set[str] = set()
@@ -61,10 +75,20 @@ def validate(payload: dict, minimum_events: int = 10, now: datetime | None = Non
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--feed", type=Path, required=True)
+    parser.add_argument("--previous-feed", type=Path)
     parser.add_argument("--minimum-events", type=int, default=10)
+    parser.add_argument("--minimum-retention-ratio", type=float, default=0.5)
     arguments = parser.parse_args()
     payload = json.loads(arguments.feed.read_text(encoding="utf-8"))
-    errors = validate(payload, arguments.minimum_events)
+    previous_payload = None
+    if arguments.previous_feed and arguments.previous_feed.exists():
+        previous_payload = json.loads(arguments.previous_feed.read_text(encoding="utf-8"))
+    errors = validate(
+        payload,
+        arguments.minimum_events,
+        previous_payload=previous_payload,
+        minimum_retention_ratio=arguments.minimum_retention_ratio,
+    )
     print(json.dumps({"valid": not errors, "errors": errors}, ensure_ascii=False, indent=2))
     return 1 if errors else 0
 

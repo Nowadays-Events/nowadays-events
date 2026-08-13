@@ -54,7 +54,12 @@ jobs:
         run: python agent/nowadays_agent.py --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
 
       - name: Validate public feed
-        run: python agent/validate_feed.py --feed agent/output/events.json --minimum-events 10
+        run: >-
+          python agent/validate_feed.py
+          --feed agent/output/events.json
+          --previous-feed agent/output/previous-events.json
+          --minimum-events 10
+          --minimum-retention-ratio 0.5
 
       - name: Build public feed
         run: |

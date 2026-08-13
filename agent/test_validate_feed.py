@@ -26,6 +26,27 @@ class ValidateFeedTests(unittest.TestCase):
         errors = validate({"events": []}, minimum_events=10, now=self.NOW)
         self.assertTrue(any("minimum attendu" in error for error in errors))
 
+    def test_rejects_large_drop_compared_with_previous_feed(self):
+        current = {"events": [event(str(index)) for index in range(12)]}
+        previous = {"events": [event(str(index)) for index in range(30)]}
+        errors = validate(
+            current,
+            minimum_events=10,
+            now=self.NOW,
+            previous_payload=previous,
+        )
+        self.assertTrue(any("Chute anormale" in error for error in errors))
+
+    def test_accepts_normal_drop_compared_with_previous_feed(self):
+        current = {"events": [event(str(index)) for index in range(18)]}
+        previous = {"events": [event(str(index)) for index in range(30)]}
+        self.assertEqual([], validate(
+            current,
+            minimum_events=10,
+            now=self.NOW,
+            previous_payload=previous,
+        ))
+
     def test_rejects_duplicate_invalid_and_stale_entries(self):
         payload = {"events": [
             event("same", "2014-08-11T00:00:00Z", "2014-08-11T00:00:00Z"),

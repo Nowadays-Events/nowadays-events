@@ -88,3 +88,7 @@ validée vers `curated_events` permet sa publication dans l’application.
 
 `health.json` contient également un bilan par source : priorité, confiance,
 nombre de fiches trouvées, nombre retenu dans le rayon et nombre d’échecs.
+
+Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
+de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
+flux valide lorsqu’une collecte connaît une panne générale ou un défaut de parsing.
