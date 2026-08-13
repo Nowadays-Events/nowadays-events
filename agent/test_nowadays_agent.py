@@ -4,11 +4,17 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, mark_unverified, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, mark_unverified, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
+    def test_timeout_is_a_transient_network_error(self):
+        self.assertTrue(is_transient_network_error(TimeoutError("timed out")))
+        self.assertTrue(is_transient_network_error(URLError(TimeoutError("timed out"))))
+        self.assertFalse(is_transient_network_error(ValueError("invalid payload")))
+
     def test_extracts_structured_event_and_cancellation(self):
         payload = {
             "@context": "https://schema.org",

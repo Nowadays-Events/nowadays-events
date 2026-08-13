@@ -51,7 +51,7 @@ jobs:
           HELLOASSO_CLIENT_SECRET: ${{ secrets.HELLOASSO_CLIENT_SECRET }}
           EVENTBRITE_PRIVATE_TOKEN: ${{ secrets.EVENTBRITE_PRIVATE_TOKEN }}
           EVENTBRITE_ORGANIZATION_IDS: ${{ secrets.EVENTBRITE_ORGANIZATION_IDS }}
-        run: python agent/nowadays_agent.py --max-pages 30 --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
+        run: python agent/nowadays_agent.py --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
 
       - name: Validate public feed
         run: python agent/validate_feed.py --feed agent/output/events.json --minimum-events 10

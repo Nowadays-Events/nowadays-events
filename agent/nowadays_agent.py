@@ -19,6 +19,7 @@ import sys
 import time
 import unicodedata
 import urllib.request
+from urllib.error import URLError
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -143,6 +144,15 @@ def parse_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def is_transient_network_error(error: Exception) -> bool:
+    if isinstance(error, TimeoutError):
+        return True
+    if isinstance(error, URLError):
+        reason = error.reason
+        return isinstance(reason, TimeoutError) or "timed out" in str(reason).lower()
+    return False
 
 
 def event_category(node: dict[str, Any]) -> str:
@@ -677,6 +687,7 @@ def run(
     radius = float(config["radius_km"])
     collected: list[Event] = []
     failures: list[str] = []
+    warnings: list[str] = []
     deadline = time.monotonic() + max_runtime_seconds
     source_reports: list[dict[str, Any]] = []
     sources = sorted(config["sources"], key=lambda item: int(item.get("priority", 0)), reverse=True)
@@ -757,9 +768,13 @@ def run(
         except InvalidCredentials:
             source_status = "credentials_invalid"
         except Exception as error:  # une source en panne ne bloque pas les autres
-            source_failure_count += 1
-            source_status = "degraded"
-            failures.append(f"{source['name']}: {error}")
+            if is_transient_network_error(error):
+                source_status = "transient_error"
+                warnings.append(f"{source['name']}: {error}")
+            else:
+                source_failure_count += 1
+                source_status = "degraded"
+                failures.append(f"{source['name']}: {error}")
         source_reports.append({
             "name": source["name"],
             "type": source.get("type", "jsonld"),
@@ -785,7 +800,7 @@ def run(
         exported = export_feed(connection, output_path)
     pending_candidates = export_candidates(config, output_path.with_name("candidates.json"), now)
     report = {
-        "status": "ok" if not failures else "degraded",
+        "status": "degraded" if failures else "partial" if warnings else "ok",
         "generated_at": now,
         "sources": len(config["sources"]),
         "source_reports": source_reports,
@@ -798,6 +813,7 @@ def run(
         "marked_unverified": unverified,
         "exported": exported,
         "failures": failures,
+        "warnings": warnings,
     }
     output_path.with_name("health.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
