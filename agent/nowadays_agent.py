@@ -19,7 +19,7 @@ import sys
 import time
 import unicodedata
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -272,7 +272,71 @@ def extract_events(body: str, source_name: str, page_url: str) -> list[Event]:
     unique: dict[str, Event] = {}
     for event in found:
         unique[event.external_id] = event
-    return list(unique.values())
+    return enrich_recurring_events(list(unique.values()), body)
+
+
+def enrich_recurring_events(
+    events: list[Event], body: str, now: datetime | None = None,
+) -> list[Event]:
+    """Ajoute la prochaine occurrence à partir des périodes Tourinsoft du HTML."""
+    reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    schedules: list[dict[str, Any]] = []
+    for _, encoded in re.findall(r"\bperiods=(['\"])(.*?)\1", body, flags=re.IGNORECASE | re.DOTALL):
+        try:
+            payload = json.loads(html.unescape(encoded))
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(payload, list):
+            schedules.extend(item for item in payload if isinstance(item, dict) and item.get("startDate") and item.get("days"))
+    if not schedules:
+        return events
+
+    occurrences: list[datetime] = []
+    for period in schedules:
+        try:
+            start = datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(period.get("endDate") or period["startDate"]).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        period_timezone = start.tzinfo or timezone.utc
+        start = start.astimezone(timezone.utc)
+        end = end.astimezone(timezone.utc)
+        weekdays: set[int] = set()
+        times: dict[int, str] = {}
+        for group in period.get("days") or []:
+            for day in group.get("days") or []:
+                try:
+                    weekday = int(str(day.get("day", "")).rsplit(".", 1)[-1]) - 2
+                except ValueError:
+                    continue
+                if 0 <= weekday <= 6:
+                    weekdays.add(weekday)
+                    first_schedule = (day.get("schedules") or [{}])[0]
+                    times[weekday] = str(first_schedule.get("startTime") or "00:00:00")
+        cursor = max(reference.date(), start.date())
+        while cursor <= end.date():
+            if cursor.weekday() in weekdays:
+                try:
+                    hour, minute, second = (int(part) for part in times[cursor.weekday()].split(":"))
+                except (ValueError, KeyError):
+                    hour = minute = second = 0
+                occurrence = datetime(
+                    cursor.year, cursor.month, cursor.day, hour, minute, second, tzinfo=period_timezone,
+                ).astimezone(timezone.utc)
+                if occurrence >= reference:
+                    occurrences.append(occurrence)
+            cursor += timedelta(days=1)
+    if not occurrences:
+        return events
+    unique_occurrences = sorted(set(occurrences))
+    return [
+        replace(
+            event,
+            occurrence_count=max(event.occurrence_count, len(unique_occurrences)),
+            next_occurrence_at=unique_occurrences[0].isoformat(),
+        )
+        for event in events
+    ]
 
 
 FRENCH_MONTHS = {

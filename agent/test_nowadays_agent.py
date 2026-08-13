@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, mark_unverified, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, mark_unverified, persist
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -61,6 +61,26 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("MUSIC", unknown.category)
         self.assertEqual("unknown", unknown.price_type)
         self.assertEqual(("paid", 1250, "EUR"), (paid.price_type, paid.price_cents, paid.currency))
+
+    def test_enriches_tourinsoft_weekly_recurrence(self):
+        base = event_from_curated({
+            "@type": "Event", "name": "Marché", "startDate": "2026-01-01T00:00:00Z",
+            "endDate": "2026-12-31T23:59:59Z", "url": "https://example.org/marche",
+            "location": {"name": "Place", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        })
+        periods = [{
+            "startDate": "2026-01-01T00:00:00+00:00", "endDate": "2026-08-31T23:59:59+00:00",
+            "days": [{"days": [
+                {"day": "09.02.03", "schedules": [{"startTime": "06:00:00"}]},
+                {"day": "09.02.07", "schedules": [{"startTime": "06:00:00"}]},
+            ]}],
+        }]
+        body = f"<li periods='{json.dumps(periods)}'></li>"
+        enriched = enrich_recurring_events(
+            [base], body, datetime.fromisoformat("2026-08-13T00:00:00+00:00"),
+        )[0]
+        self.assertEqual("2026-08-15T06:00:00+00:00", enriched.next_occurrence_at)
+        self.assertGreater(enriched.occurrence_count, 1)
 
     def test_builds_validated_curated_event(self):
         event = event_from_curated({
