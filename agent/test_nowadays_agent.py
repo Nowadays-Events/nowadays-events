@@ -82,6 +82,24 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("2026-08-15T06:00:00+00:00", enriched.next_occurrence_at)
         self.assertGreater(enriched.occurrence_count, 1)
 
+    def test_uses_explicit_date_for_irregular_tourinsoft_schedule(self):
+        base = event_from_curated({
+            "@type": "Event", "name": "Visite", "startDate": "2026-08-03T00:00:00Z",
+            "endDate": "2026-08-31T23:59:59Z", "url": "https://example.org/visite",
+            "location": {"name": "Office", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        })
+        broad = [{
+            "startDate": "2026-08-03T00:00:00+02:00", "endDate": "2026-08-31T23:59:59+02:00",
+            "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "10:00:00"}]}]}],
+        }]
+        exact = [{"date": "2026-08-17", "schedules": [{"startTime": "10:00:00"}]}]
+        body = f"<i periods='{json.dumps(broad)}'></i><i periods='{json.dumps(exact)}'></i>"
+        enriched = enrich_recurring_events(
+            [base], body, datetime.fromisoformat("2026-08-13T00:00:00+00:00"),
+        )[0]
+        self.assertEqual("2026-08-17T08:00:00+00:00", enriched.next_occurrence_at)
+        self.assertGreater(enriched.occurrence_count, 1)
+
     def test_builds_validated_curated_event(self):
         event = event_from_curated({
             "@type": "Event",

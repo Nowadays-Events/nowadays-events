@@ -280,7 +280,17 @@ def enrich_recurring_events(
 ) -> list[Event]:
     """Ajoute la prochaine occurrence à partir des périodes Tourinsoft du HTML."""
     reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    decoded_body = html.unescape(body)
+    offset_match = re.search(r'"startDate"\s*:\s*"[^"\n]*([+-])(\d{2}):(\d{2})"', decoded_body)
+    if offset_match:
+        offset_minutes = int(offset_match.group(2)) * 60 + int(offset_match.group(3))
+        if offset_match.group(1) == "-":
+            offset_minutes *= -1
+        page_timezone = timezone(timedelta(minutes=offset_minutes))
+    else:
+        page_timezone = timezone.utc
     schedules: list[dict[str, Any]] = []
+    explicit_occurrences: list[datetime] = []
     for _, encoded in re.findall(r"\bperiods=(['\"])(.*?)\1", body, flags=re.IGNORECASE | re.DOTALL):
         try:
             payload = json.loads(html.unescape(encoded))
@@ -288,10 +298,21 @@ def enrich_recurring_events(
             continue
         if isinstance(payload, list):
             schedules.extend(item for item in payload if isinstance(item, dict) and item.get("startDate") and item.get("days"))
-    if not schedules:
+            for item in payload:
+                if not isinstance(item, dict) or not item.get("date"):
+                    continue
+                first_schedule = (item.get("schedules") or [{}])[0]
+                start_time = str(first_schedule.get("startTime") or "00:00:00")
+                try:
+                    explicit = datetime.fromisoformat(f"{item['date']}T{start_time}").replace(tzinfo=page_timezone)
+                except ValueError:
+                    continue
+                if explicit >= reference:
+                    explicit_occurrences.append(explicit.astimezone(timezone.utc))
+    if not schedules and not explicit_occurrences:
         return events
 
-    occurrences: list[datetime] = []
+    occurrences: list[datetime] = list(explicit_occurrences)
     for period in schedules:
         try:
             start = datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
@@ -309,7 +330,9 @@ def enrich_recurring_events(
                     weekday = int(str(day.get("day", "")).rsplit(".", 1)[-1]) - 2
                 except ValueError:
                     continue
-                if 0 <= weekday <= 6:
+                # 09.02.08 représente des dates irrégulières, pas le dimanche.
+                # Celles-ci sont fournies séparément sous la forme {"date": ...}.
+                if 0 <= weekday <= 5:
                     weekdays.add(weekday)
                     first_schedule = (day.get("schedules") or [{}])[0]
                     times[weekday] = str(first_schedule.get("startTime") or "00:00:00")
@@ -332,7 +355,11 @@ def enrich_recurring_events(
     return [
         replace(
             event,
-            occurrence_count=max(event.occurrence_count, len(unique_occurrences)),
+            occurrence_count=max(
+                event.occurrence_count,
+                len(unique_occurrences),
+                2 if explicit_occurrences and event.end_at[:10] != event.start_at[:10] else 1,
+            ),
             next_occurrence_at=unique_occurrences[0].isoformat(),
         )
         for event in events
