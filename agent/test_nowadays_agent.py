@@ -6,10 +6,18 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
+    def test_collection_status_distinguishes_invalid_from_missing_credentials(self):
+        missing = [{"status": "credentials_missing"}]
+        invalid = [{"status": "credentials_invalid"}]
+        self.assertEqual("ok", collection_status([], [], missing))
+        self.assertEqual("attention", collection_status([], [], invalid))
+        self.assertEqual("partial", collection_status([], ["timeout"], invalid))
+        self.assertEqual("degraded", collection_status(["parsing failed"], [], invalid))
+
     def test_timeout_is_a_transient_network_error(self):
         self.assertTrue(is_transient_network_error(TimeoutError("timed out")))
         self.assertTrue(is_transient_network_error(URLError(TimeoutError("timed out"))))

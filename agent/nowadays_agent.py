@@ -743,6 +743,18 @@ def export_candidates(config: dict[str, Any], output: Path, now: str) -> int:
     return len(candidates)
 
 
+def collection_status(
+    failures: list[str], warnings: list[str], source_reports: list[dict[str, Any]],
+) -> str:
+    if failures:
+        return "degraded"
+    if warnings:
+        return "partial"
+    if any(source.get("status") == "credentials_invalid" for source in source_reports):
+        return "attention"
+    return "ok"
+
+
 def run(
     config_path: Path,
     database_path: Path,
@@ -869,7 +881,7 @@ def run(
         exported = export_feed(connection, output_path)
     pending_candidates = export_candidates(config, output_path.with_name("candidates.json"), now)
     report = {
-        "status": "degraded" if failures else "partial" if warnings else "ok",
+        "status": collection_status(failures, warnings, source_reports),
         "generated_at": now,
         "sources": len(config["sources"]),
         "source_reports": source_reports,

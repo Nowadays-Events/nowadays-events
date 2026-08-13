@@ -89,7 +89,8 @@ validée vers `curated_events` permet sa publication dans l’application.
 `health.json` contient également un bilan par source : priorité, confiance,
 nombre de fiches trouvées, nombre retenu dans le rayon et nombre d’échecs.
 Une source configurée dont les identifiants sont refusés ouvre également une
-alerte administrateur ; un connecteur volontairement non configuré reste ignoré.
+alerte administrateur et place l’état global en `attention` ; un connecteur
+volontairement non configuré reste ignoré.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
