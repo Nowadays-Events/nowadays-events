@@ -33,6 +33,10 @@ from provider_sources import InvalidCredentials, MissingCredentials, collect_api
 USER_AGENT = "XymisEventsAgent/0.1 (+local prototype)"
 CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled")
 POSTPONED_TOKENS = ("reporté", "reporte", "postponed", "rescheduled")
+TITLE_STOP_WORDS = {
+    "a", "au", "aux", "d", "de", "des", "du", "en", "et", "la", "le", "les",
+    "l", "programme", "complet", "agenda", "edition",
+}
 
 
 class JsonLdParser(HTMLParser):
@@ -102,6 +106,33 @@ def normalize(value: str) -> str:
 def canonical_url(value: str) -> str:
     parts = urlsplit(value.strip())
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), "", ""))
+
+
+def significant_title_tokens(value: str) -> set[str]:
+    return {
+        token.rstrip("s")
+        for token in normalize(value).split()
+        if token not in TITLE_STOP_WORDS and not re.fullmatch(r"20\d{2}", token)
+    }
+
+
+def likely_duplicate(
+    event: Event,
+    title: str,
+    start_at: str,
+    end_at: str,
+    latitude: float,
+    longitude: float,
+) -> bool:
+    if event.start_at[:10] != start_at[:10] or event.end_at[:10] != end_at[:10]:
+        return False
+    if distance_km(event.latitude, event.longitude, latitude, longitude) > 1.5:
+        return False
+    left = significant_title_tokens(event.title)
+    right = significant_title_tokens(title)
+    if not left or not right:
+        return False
+    return len(left & right) / len(left | right) >= 0.75
 
 
 def first_text(value: Any) -> str:
@@ -533,6 +564,19 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
             "SELECT external_id FROM events WHERE external_id=? OR fingerprint=? LIMIT 1",
             (event.external_id, event.fingerprint),
         ).fetchone()
+        if not existing:
+            nearby = connection.execute(
+                """
+                SELECT external_id,title,start_at,end_at,latitude,longitude
+                FROM events
+                WHERE substr(start_at,1,10)=? AND substr(end_at,1,10)=?
+                """,
+                (event.start_at[:10], event.end_at[:10]),
+            ).fetchall()
+            existing = next((
+                (row[0],) for row in nearby
+                if likely_duplicate(event, row[1], row[2], row[3], row[4], row[5])
+            ), None)
         chosen_id = existing[0] if existing else event.external_id
         if existing:
             updated += 1

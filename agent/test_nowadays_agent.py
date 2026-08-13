@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, mark_unverified, persist, should_export_event
+from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -240,6 +240,38 @@ class NowadaysAgentTests(unittest.TestCase):
             output = Path(directory) / "events.json"
             self.assertEqual(1, export_feed(database, output, datetime.fromisoformat("2026-08-01T00:00:00+00:00")))
             self.assertEqual(2, len(json.loads(output.read_text())["events"][0]["source_urls"]))
+
+    def test_persist_merges_similar_parent_titles_from_two_sources(self):
+        first_html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Fêtes de la Madeleine",
+          "startDate":"2026-07-22", "endDate":"2026-07-26",
+          "location":{"name":"Mont-de-Marsan","geo":{"latitude":43.8904,"longitude":-0.5007}}
+        }</script>'''
+        second_html = first_html.replace(
+            'Fêtes de la Madeleine', 'Madeleine 2026 : le programme complet des fêtes'
+        ).replace('43.8904', '43.8910')
+        first = extract_events(first_html, "A", "https://a.example/madeleine")[0]
+        second = extract_events(second_html, "B", "https://b.example/madeleine")[0]
+        database = sqlite3.connect(":memory:")
+        database.executescript(SCHEMA)
+        persist(database, [first, second], "2026-07-01T10:00:00+00:00")
+        self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+        self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
+
+    def test_specific_sub_event_is_not_merged_with_parent(self):
+        parent_html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Fêtes de la Madeleine",
+          "startDate":"2026-07-22", "endDate":"2026-07-26",
+          "location":{"geo":{"latitude":43.8904,"longitude":-0.5007}}
+        }</script>'''
+        child_html = parent_html.replace(
+            'Fêtes de la Madeleine', 'Journée des bandas des Fêtes de la Madeleine'
+        )
+        parent = extract_events(parent_html, "A", "https://a.example/parent")[0]
+        child = extract_events(child_html, "A", "https://a.example/child")[0]
+        self.assertFalse(likely_duplicate(
+            child, parent.title, parent.start_at, parent.end_at, parent.latitude, parent.longitude,
+        ))
 
     def test_public_feed_hides_expired_active_but_keeps_recent_cancelled(self):
         now = datetime.fromisoformat("2026-08-13T12:00:00+00:00")
