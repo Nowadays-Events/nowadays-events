@@ -630,7 +630,31 @@ def mark_unverified(connection: sqlite3.Connection, now: str, grace_hours: int =
     return cursor.rowcount
 
 
-def export_feed(connection: sqlite3.Connection, output: Path) -> int:
+def should_export_event(item: dict[str, Any], now: datetime) -> bool:
+    try:
+        end = datetime.fromisoformat(str(item.get("end_at") or "").replace("Z", "+00:00"))
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    status = str(item.get("status") or "active")
+    if status in ("cancelled", "postponed"):
+        return end >= now - timedelta(days=30)
+    next_occurrence = item.get("next_occurrence_at")
+    if next_occurrence:
+        try:
+            occurrence = datetime.fromisoformat(str(next_occurrence).replace("Z", "+00:00"))
+            if occurrence.tzinfo is None:
+                occurrence = occurrence.replace(tzinfo=timezone.utc)
+            if occurrence >= now:
+                return True
+        except ValueError:
+            pass
+    return end.date() >= now.date()
+
+
+def export_feed(connection: sqlite3.Connection, output: Path, now: datetime | None = None) -> int:
+    reference = now or datetime.now(timezone.utc)
     rows = connection.execute(
         """
         SELECT e.*, GROUP_CONCAT(s.source_url, char(10)) AS source_urls
@@ -648,9 +672,10 @@ def export_feed(connection: sqlite3.Connection, output: Path) -> int:
     for row in rows:
         item = dict(zip(columns, row))
         item["source_urls"] = item["source_urls"].splitlines()
-        payload.append(item)
+        if should_export_event(item, reference):
+            payload.append(item)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"generated_at": datetime.now(timezone.utc).isoformat(), "events": payload}, ensure_ascii=False, indent=2), encoding="utf-8")
+    output.write_text(json.dumps({"generated_at": reference.isoformat(), "events": payload}, ensure_ascii=False, indent=2), encoding="utf-8")
     return len(payload)
 
 

@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, mark_unverified, persist
+from nowadays_agent import SCHEMA, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, mark_unverified, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -238,8 +238,20 @@ class NowadaysAgentTests(unittest.TestCase):
             self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
             self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
             output = Path(directory) / "events.json"
-            self.assertEqual(1, export_feed(database, output))
+            self.assertEqual(1, export_feed(database, output, datetime.fromisoformat("2026-08-01T00:00:00+00:00")))
             self.assertEqual(2, len(json.loads(output.read_text())["events"][0]["source_urls"]))
+
+    def test_public_feed_hides_expired_active_but_keeps_recent_cancelled(self):
+        now = datetime.fromisoformat("2026-08-13T12:00:00+00:00")
+        expired = {"end_at": "2026-08-12T23:59:00+00:00", "status": "active"}
+        cancelled = {"end_at": "2026-08-05T12:00:00+00:00", "status": "cancelled"}
+        recurring = {
+            "end_at": "2026-08-01T12:00:00+00:00", "status": "active",
+            "next_occurrence_at": "2026-08-15T10:00:00+00:00",
+        }
+        self.assertFalse(should_export_event(expired, now))
+        self.assertTrue(should_export_event(cancelled, now))
+        self.assertTrue(should_export_event(recurring, now))
 
     def test_previous_feed_becomes_unverified_without_becoming_cancelled(self):
         with tempfile.TemporaryDirectory() as directory:
