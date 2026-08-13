@@ -22,7 +22,7 @@ def gh(*arguments: str) -> str:
 def degraded_sources(payload: dict) -> list[dict]:
     return [
         source for source in payload.get("source_reports", [])
-        if source.get("status") == "degraded"
+        if source.get("status") in {"degraded", "credentials_invalid"}
     ]
 
 
@@ -34,18 +34,24 @@ def incident_id(sources: list[dict]) -> str:
 def issue_body(payload: dict, sources: list[dict], identifier: str) -> str:
     lines = []
     for source in sources:
+        status = source.get("status", "degraded")
+        diagnosis = (
+            "identifiants refusés — vérifier ou renouveler le secret GitHub"
+            if status == "credentials_invalid"
+            else f"{source.get('failures', 0)} erreur(s)"
+        )
         lines.append(
             f"- **{source.get('name', 'Source inconnue')}** : "
             f"{source.get('candidates', 0)} candidat(s), "
             f"{source.get('accepted_in_radius', 0)} retenu(s), "
-            f"{source.get('failures', 0)} erreur(s)"
+            f"{diagnosis}"
         )
     details = "\n".join(lines) or "- Aucune source détaillée"
     failures = payload.get("failures") or []
     failure_details = "\n".join(f"- `{failure}`" for failure in failures) or "- Aucun message détaillé"
     return f"""## Alerte de collecte Xymis Events
 
-Le flux a été produit, mais une ou plusieurs sources sont dégradées.
+Le flux a été produit, mais une ou plusieurs sources nécessitent une intervention.
 
 {details}
 
