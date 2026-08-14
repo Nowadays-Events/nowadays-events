@@ -58,6 +58,18 @@
       "max_detail_pages": 50
     },
     {
+      "name": "Mimizan Tourisme — agenda officiel",
+      "type": "jsonld",
+      "priority": 100,
+      "trust": "official",
+      "url": "https://www.mimizan-tourisme.com/agenda/tout-l-agenda/",
+      "coverage_areas": ["Mimizan"],
+      "detail_path_tokens": ["/offres/"],
+      "list_pages": 2,
+      "min_candidates": 10,
+      "max_detail_pages": 30
+    },
+    {
       "name": "Ville de Saint-Sever",
       "type": "jsonld",
       "priority": 100,

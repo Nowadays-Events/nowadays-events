@@ -120,6 +120,10 @@ indique que cette extension est encore prématurée.
 issue GitHub assignée à l'administrateur ; le rayon ne change jamais sans une
 validation humaine explicite.
 
+La source officielle de Mimizan est collectée en préparation de cette extension.
+Elle est marquée comme couverture de Mimizan, mais ses événements restent soumis
+au rayon public actuel de 50 km tant que l'extension n'est pas validée.
+
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
 flux valide lorsqu’une collecte connaît une panne générale ou un défaut de parsing.

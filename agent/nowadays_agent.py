@@ -510,7 +510,9 @@ def fetch(url: str, timeout: int = 20) -> str:
             return content.decode(charset, errors="replace")
 
 
-def detail_links(body: str, base_url: str, limit: int) -> list[str]:
+def detail_links(
+    body: str, base_url: str, limit: int, path_tokens: Iterable[str] | None = None,
+) -> list[str]:
     parser = LinkParser()
     parser.feed(body)
     base = urlsplit(base_url)
@@ -521,7 +523,8 @@ def detail_links(body: str, base_url: str, limit: int) -> list[str]:
         if parts.netloc != base.netloc or url == canonical_url(base_url):
             continue
         path = parts.path.lower()
-        if "/agenda/" not in path and "/agenda-" not in path:
+        accepted_tokens = tuple(path_tokens or ("/agenda/", "/agenda-"))
+        if not any(token.lower() in path for token in accepted_tokens):
             continue
         if url not in accepted:
             accepted.append(url)
@@ -833,7 +836,12 @@ def run(
                         failures.append(f"{source['name']} (liste {list_page}): {error}")
                 source_detail_links: list[str] = []
                 for listing_body in listing_bodies:
-                    for detail_url in detail_links(listing_body, source["url"], page_limit):
+                    for detail_url in detail_links(
+                        listing_body,
+                        source["url"],
+                        page_limit,
+                        source.get("detail_path_tokens"),
+                    ):
                         if detail_url not in source_detail_links:
                             source_detail_links.append(detail_url)
                         if len(source_detail_links) >= page_limit:

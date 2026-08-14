@@ -251,6 +251,24 @@ class NowadaysAgentTests(unittest.TestCase):
             detail_links(body, "https://example.org/agenda/", 1),
         )
 
+    def test_detail_links_support_source_specific_offer_paths(self):
+        body = '''
+        <a href="/offres/concert-mimizan-fr-123/">Concert</a>
+        <a href="/hebergements/hotel/">Hôtel</a>
+        '''
+        self.assertEqual(
+            ["https://example.org/offres/concert-mimizan-fr-123"],
+            detail_links(body, "https://example.org/agenda/", 10, ["/offres/"]),
+        )
+
+    def test_mimizan_official_source_is_prepared_without_expanding_radius(self):
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        source = next(item for item in config["sources"] if item["name"].startswith("Mimizan Tourisme"))
+        self.assertEqual(50, config["radius_km"])
+        self.assertEqual(["Mimizan"], source["coverage_areas"])
+        self.assertIn("/offres/", source["detail_path_tokens"])
+        self.assertGreaterEqual(source["min_candidates"], 10)
+
     def test_persist_merges_same_fingerprint_and_keeps_sources(self):
         html = """
         <script type="application/ld+json">
