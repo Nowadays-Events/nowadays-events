@@ -104,6 +104,17 @@ fiche collectée ne puisse pas injecter un lien dangereux dans l'application.
 Un second calcul géographique indépendant bloque aussi le déploiement si une
 fiche sort du rayon de 50 km autour de Mont-de-Marsan, ce qui empêche notamment
 le retour accidentel d'anciens événements de démonstration situés à Paris.
+Le centre et le rayon de ce contrôle sont lus dans `config.json`, comme ceux du
+collecteur : une future extension vers la côte ne nécessitera donc qu'un seul
+changement de configuration.
+
+## Extension future vers la côte landaise
+
+Le rayon ne sera agrandi qu'après stabilisation des connecteurs et ajout de
+sources officielles couvrant au minimum Dax, Mimizan et Biscarrosse. Cela évite
+de donner une fausse impression de couverture avec de grandes zones presque
+vides. L'état `attention` d'un connecteur prioritaire, notamment OpenAgenda,
+indique que cette extension est encore prématurée.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier

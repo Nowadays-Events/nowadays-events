@@ -28,6 +28,24 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
+def geographic_settings(
+    config: dict,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    radius_km: float | None = None,
+) -> tuple[tuple[float, float] | None, float | None]:
+    configured_center = config.get("center") or {}
+    resolved_latitude = latitude if latitude is not None else configured_center.get("latitude")
+    resolved_longitude = longitude if longitude is not None else configured_center.get("longitude")
+    resolved_radius = radius_km if radius_km is not None else config.get("radius_km")
+    center = (
+        (float(resolved_latitude), float(resolved_longitude))
+        if resolved_latitude is not None and resolved_longitude is not None
+        else None
+    )
+    return center, float(resolved_radius) if resolved_radius is not None else None
+
+
 def validate(
     payload: dict,
     minimum_events: int = 10,
@@ -117,6 +135,7 @@ def validate(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--feed", type=Path, required=True)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--previous-feed", type=Path)
     parser.add_argument("--minimum-events", type=int, default=10)
     parser.add_argument("--minimum-retention-ratio", type=float, default=0.5)
@@ -125,6 +144,12 @@ def main() -> int:
     parser.add_argument("--radius-km", type=float)
     arguments = parser.parse_args()
     payload = json.loads(arguments.feed.read_text(encoding="utf-8"))
+    config = {}
+    if arguments.config:
+        config = json.loads(arguments.config.read_text(encoding="utf-8"))
+    center, radius_km = geographic_settings(
+        config, arguments.center_latitude, arguments.center_longitude, arguments.radius_km,
+    )
     previous_payload = None
     if arguments.previous_feed and arguments.previous_feed.exists():
         previous_payload = json.loads(arguments.previous_feed.read_text(encoding="utf-8"))
@@ -133,10 +158,8 @@ def main() -> int:
         arguments.minimum_events,
         previous_payload=previous_payload,
         minimum_retention_ratio=arguments.minimum_retention_ratio,
-        center=(arguments.center_latitude, arguments.center_longitude)
-        if arguments.center_latitude is not None and arguments.center_longitude is not None
-        else None,
-        radius_km=arguments.radius_km,
+        center=center,
+        radius_km=radius_km,
     )
     print(json.dumps({"valid": not errors, "errors": errors}, ensure_ascii=False, indent=2))
     return 1 if errors else 0

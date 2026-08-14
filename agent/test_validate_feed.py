@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from validate_feed import validate
+from validate_feed import geographic_settings, validate
 
 
 def event(identifier="one", start="2026-08-12T10:00:00+00:00", end="2026-08-12T12:00:00+00:00"):
@@ -21,6 +21,14 @@ class ValidateFeedTests(unittest.TestCase):
 
     def test_accepts_valid_feed(self):
         self.assertEqual([], validate({"events": [event()]}, minimum_events=1, now=self.NOW))
+
+    def test_reads_geographic_settings_from_single_config(self):
+        config = {
+            "center": {"latitude": 43.8904, "longitude": -0.5007},
+            "radius_km": 50,
+        }
+        self.assertEqual(((43.8904, -0.5007), 50.0), geographic_settings(config))
+        self.assertEqual(((44.0, -1.0), 90.0), geographic_settings(config, 44.0, -1.0, 90))
 
     def test_rejects_collapsed_feed(self):
         errors = validate({"events": []}, minimum_events=10, now=self.NOW)

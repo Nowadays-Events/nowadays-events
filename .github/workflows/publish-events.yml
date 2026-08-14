@@ -57,12 +57,10 @@ jobs:
         run: >-
           python agent/validate_feed.py
           --feed agent/output/events.json
+          --config agent/config.json
           --previous-feed agent/output/previous-events.json
           --minimum-events 10
           --minimum-retention-ratio 0.5
-          --center-latitude 43.8904
-          --center-longitude -0.5007
-          --radius-km 50
 
       - name: Build public feed
         run: |
