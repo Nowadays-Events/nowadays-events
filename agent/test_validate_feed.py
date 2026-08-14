@@ -94,6 +94,18 @@ class ValidateFeedTests(unittest.TestCase):
             {"events": [malformed]}, minimum_events=1, now=self.NOW,
         )))
 
+    def test_rejects_event_outside_configured_radius(self):
+        paris = {**event(), "latitude": 48.8566, "longitude": 2.3522}
+        errors = validate(
+            {"events": [paris]}, minimum_events=1, now=self.NOW,
+            center=(43.8904, -0.5007), radius_km=50,
+        )
+        self.assertTrue(any("hors du rayon de 50 km" in error for error in errors))
+        self.assertEqual([], validate(
+            {"events": [event()]}, minimum_events=1, now=self.NOW,
+            center=(43.8904, -0.5007), radius_km=50,
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

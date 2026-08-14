@@ -101,6 +101,9 @@ Le contrôle avant publication refuse également une récurrence active dont la
 prochaine occurrence est absente, passée ou située après la fin annoncée.
 Les liens de source sont limités aux URL web absolues `http`/`https` afin qu'une
 fiche collectée ne puisse pas injecter un lien dangereux dans l'application.
+Un second calcul géographique indépendant bloque aussi le déploiement si une
+fiche sort du rayon de 50 km autour de Mont-de-Marsan, ce qui empêche notamment
+le retour accidentel d'anciens événements de démonstration situés à Paris.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier

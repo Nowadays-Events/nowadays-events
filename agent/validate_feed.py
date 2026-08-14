@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -15,12 +16,26 @@ def parse_datetime(value: object) -> datetime:
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
+def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    value = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
 def validate(
     payload: dict,
     minimum_events: int = 10,
     now: datetime | None = None,
     previous_payload: dict | None = None,
     minimum_retention_ratio: float = 0.5,
+    center: tuple[float, float] | None = None,
+    radius_km: float | None = None,
 ) -> list[str]:
     errors: list[str] = []
     events = payload.get("events")
@@ -79,6 +94,10 @@ def validate(
             longitude = float(event.get("longitude"))
             if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
                 errors.append(f"{label}: coordonnées hors limites")
+            elif center is not None and radius_km is not None and distance_km(
+                center[0], center[1], latitude, longitude,
+            ) > radius_km:
+                errors.append(f"{label}: événement hors du rayon de {radius_km:g} km")
         except (TypeError, ValueError):
             errors.append(f"{label}: coordonnées invalides")
         source_urls = event.get("source_urls")
@@ -101,6 +120,9 @@ def main() -> int:
     parser.add_argument("--previous-feed", type=Path)
     parser.add_argument("--minimum-events", type=int, default=10)
     parser.add_argument("--minimum-retention-ratio", type=float, default=0.5)
+    parser.add_argument("--center-latitude", type=float)
+    parser.add_argument("--center-longitude", type=float)
+    parser.add_argument("--radius-km", type=float)
     arguments = parser.parse_args()
     payload = json.loads(arguments.feed.read_text(encoding="utf-8"))
     previous_payload = None
@@ -111,6 +133,10 @@ def main() -> int:
         arguments.minimum_events,
         previous_payload=previous_payload,
         minimum_retention_ratio=arguments.minimum_retention_ratio,
+        center=(arguments.center_latitude, arguments.center_longitude)
+        if arguments.center_latitude is not None and arguments.center_longitude is not None
+        else None,
+        radius_km=arguments.radius_km,
     )
     print(json.dumps({"valid": not errors, "errors": errors}, ensure_ascii=False, indent=2))
     return 1 if errors else 0
