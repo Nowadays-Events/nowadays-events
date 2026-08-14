@@ -49,6 +49,7 @@ def validate(
         identifiers.add(identifier)
         if not str(event.get("title") or "").strip():
             errors.append(f"{label}: titre manquant")
+        end: datetime | None = None
         try:
             start = parse_datetime(event.get("start_at"))
             end = parse_datetime(event.get("end_at"))
@@ -58,6 +59,20 @@ def validate(
                 stale_count += 1
         except (TypeError, ValueError):
             errors.append(f"{label}: date invalide")
+        try:
+            occurrence_count = int(event.get("occurrence_count") or 1)
+        except (TypeError, ValueError):
+            occurrence_count = 0
+            errors.append(f"{label}: nombre d'occurrences invalide")
+        if occurrence_count > 1 and event.get("status", "active") in {"active", "unverified"}:
+            try:
+                next_occurrence = parse_datetime(event.get("next_occurrence_at"))
+                if next_occurrence < reference:
+                    errors.append(f"{label}: prochaine occurrence déjà passée")
+                if end is not None and next_occurrence > end:
+                    errors.append(f"{label}: prochaine occurrence postérieure à la fin")
+            except (TypeError, ValueError):
+                errors.append(f"{label}: prochaine occurrence manquante ou invalide")
         try:
             latitude = float(event.get("latitude"))
             longitude = float(event.get("longitude"))

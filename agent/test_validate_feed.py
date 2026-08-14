@@ -64,6 +64,26 @@ class ValidateFeedTests(unittest.TestCase):
         )
         self.assertTrue(any("fin antérieure" in error for error in errors))
 
+    def test_validates_next_recurring_occurrence(self):
+        recurring = {
+            **event(end="2026-09-30T18:00:00Z"),
+            "occurrence_count": 8,
+            "next_occurrence_at": "2026-08-15T10:00:00Z",
+        }
+        self.assertEqual([], validate({"events": [recurring]}, minimum_events=1, now=self.NOW))
+        missing = {**recurring, "next_occurrence_at": None}
+        stale = {**recurring, "next_occurrence_at": "2026-08-10T10:00:00Z"}
+        after_end = {**recurring, "next_occurrence_at": "2026-10-01T10:00:00Z"}
+        self.assertTrue(any("manquante ou invalide" in error for error in validate(
+            {"events": [missing]}, minimum_events=1, now=self.NOW,
+        )))
+        self.assertTrue(any("déjà passée" in error for error in validate(
+            {"events": [stale]}, minimum_events=1, now=self.NOW,
+        )))
+        self.assertTrue(any("postérieure à la fin" in error for error in validate(
+            {"events": [after_end]}, minimum_events=1, now=self.NOW,
+        )))
+
 
 if __name__ == "__main__":
     unittest.main()

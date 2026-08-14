@@ -97,6 +97,8 @@ du flux reste supérieur au seuil de publication.
 Lorsqu'un même événement vient de plusieurs sources, le statut le plus prudent
 est conservé (`annulé`, puis `reporté`, puis `actif`) indépendamment de l'ordre
 dans lequel les sources répondent.
+Le contrôle avant publication refuse également une récurrence active dont la
+prochaine occurrence est absente, passée ou située après la fin annoncée.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
