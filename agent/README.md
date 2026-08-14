@@ -115,6 +115,10 @@ sources officielles couvrant au minimum Dax, Mimizan et Biscarrosse. Cela évite
 de donner une fausse impression de couverture avec de grandes zones presque
 vides. L'état `attention` d'un connecteur prioritaire, notamment OpenAgenda,
 indique que cette extension est encore prématurée.
+`health.json` publie les zones couvertes, les zones manquantes et le booléen
+`expansion_ready`. Lorsque celui-ci devient vrai, le workflow ouvre une seule
+issue GitHub assignée à l'administrateur ; le rayon ne change jamais sans une
+validation humaine explicite.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier

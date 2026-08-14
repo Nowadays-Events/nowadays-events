@@ -762,6 +762,30 @@ def collection_status(
     return "ok"
 
 
+def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, Any]]) -> dict[str, Any]:
+    plan = config.get("expansion_plan") or {}
+    required_areas = set(plan.get("required_areas") or [])
+    reports_by_name = {report.get("name"): report for report in source_reports}
+    covered_areas: set[str] = set()
+    blocked_sources: list[str] = []
+    for source in config.get("sources", []):
+        report = reports_by_name.get(source.get("name"), {})
+        if report.get("status") == "ok" and report.get("reachable"):
+            covered_areas.update(source.get("coverage_areas") or [])
+        elif report.get("status") in {"degraded", "credentials_invalid", "transient_error"}:
+            blocked_sources.append(str(source.get("name")))
+    missing_areas = sorted(required_areas - covered_areas)
+    return {
+        "current_radius_km": config.get("radius_km"),
+        "target_radius_km": plan.get("target_radius_km"),
+        "required_areas": sorted(required_areas),
+        "covered_areas": sorted(covered_areas & required_areas),
+        "missing_areas": missing_areas,
+        "blocked_sources": blocked_sources,
+        "expansion_ready": bool(required_areas) and not missing_areas and not blocked_sources,
+    }
+
+
 def run(
     config_path: Path,
     database_path: Path,
@@ -892,6 +916,7 @@ def run(
         "generated_at": now,
         "sources": len(config["sources"]),
         "source_reports": source_reports,
+        "coverage_readiness": coverage_readiness(config, source_reports),
         "curated_events": len(config.get("curated_events", [])),
         "pending_candidates": pending_candidates,
         "fetched_events": len(collected),

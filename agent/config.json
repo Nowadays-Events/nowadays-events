@@ -5,6 +5,10 @@
     "longitude": -0.5007
   },
   "radius_km": 50,
+  "expansion_plan": {
+    "target_radius_km": 100,
+    "required_areas": ["Dax", "Mimizan", "Biscarrosse"]
+  },
   "sources": [
     {
       "name": "OpenAgenda — événements géolocalisés",

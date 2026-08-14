@@ -82,6 +82,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python agent/manage_health.py --health agent/output/health.json
 
+      - name: Notify administrator when coastal expansion is ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python agent/manage_coverage.py --health agent/output/health.json
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:

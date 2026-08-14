@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -18,6 +18,25 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("attention", collection_status([], [], invalid))
         self.assertEqual("partial", collection_status([], ["timeout"], invalid))
         self.assertEqual("degraded", collection_status(["parsing failed"], [], invalid))
+
+    def test_coverage_readiness_requires_healthy_sources_for_all_target_areas(self):
+        config = {
+            "radius_km": 50,
+            "expansion_plan": {"target_radius_km": 100, "required_areas": ["Dax", "Mimizan"]},
+            "sources": [
+                {"name": "Côte sud", "coverage_areas": ["Dax"]},
+                {"name": "Côte nord", "coverage_areas": ["Mimizan"]},
+            ],
+        }
+        reports = [
+            {"name": "Côte sud", "status": "ok", "reachable": True},
+            {"name": "Côte nord", "status": "credentials_invalid", "reachable": False},
+        ]
+        blocked = coverage_readiness(config, reports)
+        self.assertFalse(blocked["expansion_ready"])
+        self.assertEqual(["Mimizan"], blocked["missing_areas"])
+        reports[1] = {"name": "Côte nord", "status": "ok", "reachable": True}
+        self.assertTrue(coverage_readiness(config, reports)["expansion_ready"])
 
     def test_timeout_is_a_transient_network_error(self):
         self.assertTrue(is_transient_network_error(TimeoutError("timed out")))
