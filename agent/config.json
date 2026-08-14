@@ -70,6 +70,16 @@
       "max_detail_pages": 30
     },
     {
+      "name": "Grand Dax Tourisme — agenda officiel",
+      "type": "dax_embedded",
+      "priority": 100,
+      "trust": "official",
+      "url": "https://www.dax-tourisme.com/agenda-evenements/tout-agenda/",
+      "coverage_areas": ["Dax"],
+      "min_candidates": 10,
+      "max_detail_pages": 0
+    },
+    {
       "name": "Ville de Saint-Sever",
       "type": "jsonld",
       "priority": 100,

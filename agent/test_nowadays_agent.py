@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -268,6 +268,34 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual(["Mimizan"], source["coverage_areas"])
         self.assertIn("/offres/", source["detail_path_tokens"])
         self.assertGreaterEqual(source["min_candidates"], 10)
+
+    def test_extracts_embedded_grand_dax_tourinsoft_event(self):
+        body = '''<script>var objectsSit = [{"_source":{
+          "sit_id":"FMA040TEST", "nom":{"fr":"Concert annulé"},
+          "descriptifLong":{"fr":"Concert du soir"},
+          "localisation":{"geoJson":{"lat":"43.7100","lon":"-1.0500"},
+            "adresse1":"Arènes", "cp":"40100", "description":"Arènes de Dax",
+            "commune":{"nom":{"fr":"DAX"}}},
+          "informations":{"periode":[{"debut":"2026-08-20","fin":"2026-08-20",
+            "horaire":{"jeudi":["20:00","22:00"]}}],
+            "tarifs":[{"min":12.5}]},
+          "caracteristiques":[{"values":{"fr":"Concert"}}]
+        }}];</script>'''
+        events = extract_dax_events(body, "Grand Dax", "https://dax.example/agenda")
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("Concert annulé", event.title)
+        self.assertEqual("cancelled", event.status)
+        self.assertEqual((43.71, -1.05), (event.latitude, event.longitude))
+        self.assertEqual("paid", event.price_type)
+        self.assertEqual(1250, event.price_cents)
+        self.assertIn("DAX", event.address)
+
+    def test_grand_dax_source_is_marked_as_dax_coverage(self):
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        source = next(item for item in config["sources"] if item["name"].startswith("Grand Dax"))
+        self.assertEqual("dax_embedded", source["type"])
+        self.assertEqual(["Dax"], source["coverage_areas"])
 
     def test_persist_merges_same_fingerprint_and_keeps_sources(self):
         html = """

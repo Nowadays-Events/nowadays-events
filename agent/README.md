@@ -123,6 +123,8 @@ validation humaine explicite.
 La source officielle de Mimizan est collectée en préparation de cette extension.
 Elle est marquée comme couverture de Mimizan, mais ses événements restent soumis
 au rayon public actuel de 50 km tant que l'extension n'est pas validée.
+L'agenda officiel du Grand Dax est lu depuis son tableau Tourinsoft embarqué ; il
+reste soumis au même filtre géographique et compte comme couverture de Dax.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier

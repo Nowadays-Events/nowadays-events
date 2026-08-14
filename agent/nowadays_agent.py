@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlsplit, urlunsplit
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 from provider_sources import InvalidCredentials, MissingCredentials, collect_api_source
 
@@ -320,6 +321,86 @@ def extract_events(body: str, source_name: str, page_url: str) -> list[Event]:
     for event in found:
         unique[event.external_id] = event
     return enrich_recurring_events(list(unique.values()), body)
+
+
+def localized_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("fr") or value.get("en") or next(iter(value.values()), ""))
+    return str(value or "")
+
+
+def dax_period_datetime(period: dict[str, Any], key: str, end_of_day: bool = False) -> str:
+    raw_date = str(period.get(key) or "")
+    parsed_date = datetime.fromisoformat(raw_date).date()
+    weekdays = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+    hours = (period.get("horaire") or {}).get(weekdays[parsed_date.weekday()]) or []
+    values = [str(value).strip() for value in hours if str(value or "").strip()]
+    raw_time = values[-1] if end_of_day and values else values[0] if values else "23:59" if end_of_day else "00:00"
+    local = datetime.fromisoformat(f"{raw_date}T{raw_time}").replace(tzinfo=ZoneInfo("Europe/Paris"))
+    return local.astimezone(timezone.utc).isoformat()
+
+
+def extract_dax_events(body: str, source_name: str, page_url: str) -> list[Event]:
+    match = re.search(r"var\s+objectsSit\s*=\s*(\[.*?\])\s*;", body, re.DOTALL)
+    if not match:
+        return []
+    try:
+        objects = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return []
+    events: list[Event] = []
+    now = datetime.now(timezone.utc)
+    for wrapper in objects:
+        source = wrapper.get("_source") or {}
+        location = source.get("localisation") or {}
+        geo = location.get("geoJson") or {}
+        periods = (source.get("informations") or {}).get("periode") or []
+        periods = [period for period in periods if period.get("debut") and period.get("fin")]
+        if not periods:
+            continue
+        periods.sort(key=lambda period: str(period["debut"]))
+        start_at = dax_period_datetime(periods[0], "debut")
+        end_at = dax_period_datetime(periods[-1], "fin", end_of_day=True)
+        future_starts = [dax_period_datetime(period, "debut") for period in periods]
+        next_occurrence = next((value for value in future_starts if datetime.fromisoformat(value) >= now), None)
+        address = {
+            "streetAddress": ", ".join(filter(None, (
+                str(location.get("adresse1") or "").strip(),
+                str(location.get("adresse2") or "").strip(),
+            ))),
+            "postalCode": location.get("cp"),
+            "addressLocality": localized_text((location.get("commune") or {}).get("nom")),
+            "addressCountry": "France",
+        }
+        information = source.get("informations") or {}
+        tariffs = information.get("tarifs") or []
+        minimum_price = next((tariff.get("min") for tariff in tariffs if tariff.get("min") is not None), None)
+        node: dict[str, Any] = {
+            "@type": "Event",
+            "name": localized_text(source.get("nom") or source.get("label")),
+            "description": localized_text(source.get("descriptifLong") or source.get("descriptifCourt")),
+            "startDate": start_at,
+            "endDate": end_at,
+            "url": page_url,
+            "occurrenceCount": len(periods),
+            "nextOccurrenceDate": next_occurrence,
+            "keywords": " ".join(
+                localized_text(item.get("values") or item.get("value"))
+                for item in source.get("caracteristiques") or []
+            ),
+            "location": {
+                "@type": "Place",
+                "name": str(location.get("description") or address["addressLocality"]),
+                "address": address,
+                "geo": {"latitude": geo.get("lat"), "longitude": geo.get("lon")},
+            },
+        }
+        if minimum_price is not None:
+            node["offers"] = {"price": minimum_price, "priceCurrency": "EUR"}
+        event = event_from_json(node, source_name, page_url)
+        if event:
+            events.append(event)
+    return events
 
 
 def enrich_recurring_events(
@@ -818,9 +899,13 @@ def run(
         try:
             source_type = source.get("type", "jsonld")
             timeout = min(20, max(1, int(deadline - time.monotonic())))
-            if source_type in ("jsonld", "armagnac_html"):
+            if source_type in ("jsonld", "armagnac_html", "dax_embedded"):
                 body = fetch(source["url"], timeout=timeout)
-                candidates = extract_events(body, source["name"], source["url"])
+                candidates = (
+                    extract_dax_events(body, source["name"], source["url"])
+                    if source_type == "dax_embedded"
+                    else extract_events(body, source["name"], source["url"])
+                )
                 page_limit = max_pages if max_pages is not None else int(source.get("max_detail_pages", 20))
                 listing_bodies = [body]
                 for list_page in range(2, int(source.get("list_pages", 1)) + 1):
@@ -848,7 +933,7 @@ def run(
                             break
                     if len(source_detail_links) >= page_limit:
                         break
-                for detail_url in source_detail_links:
+                for detail_url in source_detail_links if source_type != "dax_embedded" else []:
                     if time.monotonic() >= deadline:
                         failures.append(f"{source['name']}: durée maximale atteinte")
                         break
