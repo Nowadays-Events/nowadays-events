@@ -7,6 +7,7 @@ import argparse
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def parse_datetime(value: object) -> datetime:
@@ -80,8 +81,15 @@ def validate(
                 errors.append(f"{label}: coordonnées hors limites")
         except (TypeError, ValueError):
             errors.append(f"{label}: coordonnées invalides")
-        if not event.get("source_urls"):
+        source_urls = event.get("source_urls")
+        if not isinstance(source_urls, list) or not source_urls:
             errors.append(f"{label}: source manquante")
+        else:
+            for source_url in source_urls:
+                parsed_url = urlsplit(str(source_url or ""))
+                if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                    errors.append(f"{label}: URL source non sûre ou invalide")
+                    break
     if stale_count:
         errors.append(f"{stale_count} événement(s) terminé(s) depuis plus de 30 jours")
     return errors

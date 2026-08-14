@@ -84,6 +84,16 @@ class ValidateFeedTests(unittest.TestCase):
             {"events": [after_end]}, minimum_events=1, now=self.NOW,
         )))
 
+    def test_rejects_unsafe_or_malformed_source_links(self):
+        unsafe = {**event(), "source_urls": ["javascript:alert(1)"]}
+        malformed = {**event(), "source_urls": ["https:///sans-domaine"]}
+        self.assertTrue(any("URL source non sûre" in error for error in validate(
+            {"events": [unsafe]}, minimum_events=1, now=self.NOW,
+        )))
+        self.assertTrue(any("URL source non sûre" in error for error in validate(
+            {"events": [malformed]}, minimum_events=1, now=self.NOW,
+        )))
+
 
 if __name__ == "__main__":
     unittest.main()

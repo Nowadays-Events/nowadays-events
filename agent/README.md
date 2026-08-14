@@ -99,6 +99,8 @@ est conservé (`annulé`, puis `reporté`, puis `actif`) indépendamment de l'or
 dans lequel les sources répondent.
 Le contrôle avant publication refuse également une récurrence active dont la
 prochaine occurrence est absente, passée ou située après la fin annoncée.
+Les liens de source sont limités aux URL web absolues `http`/`https` afin qu'une
+fiche collectée ne puisse pas injecter un lien dangereux dans l'application.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
