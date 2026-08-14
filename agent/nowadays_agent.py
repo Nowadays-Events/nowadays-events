@@ -135,6 +135,12 @@ def likely_duplicate(
     return len(left & right) / len(left | right) >= 0.75
 
 
+def merge_event_status(existing: str, incoming: str) -> str:
+    """Conserve l'information la plus prudente lors d'une fusion multi-source."""
+    priority = {"unverified": 0, "active": 1, "postponed": 2, "cancelled": 3}
+    return max((existing, incoming), key=lambda value: priority.get(value, 0))
+
+
 def first_text(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -561,25 +567,26 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
     inserted = updated = 0
     for event in events:
         existing = connection.execute(
-            "SELECT external_id FROM events WHERE external_id=? OR fingerprint=? LIMIT 1",
+            "SELECT external_id,status FROM events WHERE external_id=? OR fingerprint=? LIMIT 1",
             (event.external_id, event.fingerprint),
         ).fetchone()
         if not existing:
             nearby = connection.execute(
                 """
-                SELECT external_id,title,start_at,end_at,latitude,longitude
+                SELECT external_id,title,start_at,end_at,latitude,longitude,status
                 FROM events
                 WHERE substr(start_at,1,10)=? AND substr(end_at,1,10)=?
                 """,
                 (event.start_at[:10], event.end_at[:10]),
             ).fetchall()
             existing = next((
-                (row[0],) for row in nearby
+                (row[0], row[6]) for row in nearby
                 if likely_duplicate(event, row[1], row[2], row[3], row[4], row[5])
             ), None)
         chosen_id = existing[0] if existing else event.external_id
         if existing:
             updated += 1
+            event = replace(event, status=merge_event_status(existing[1], event.status))
         else:
             inserted += 1
         connection.execute(

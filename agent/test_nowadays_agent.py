@@ -2,11 +2,12 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -281,6 +282,24 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertFalse(likely_duplicate(
             child, parent.title, parent.start_at, parent.end_at, parent.latitude, parent.longitude,
         ))
+
+    def test_cancelled_status_wins_multi_source_merge_in_both_orders(self):
+        self.assertEqual("cancelled", merge_event_status("active", "cancelled"))
+        self.assertEqual("cancelled", merge_event_status("cancelled", "active"))
+        self.assertEqual("postponed", merge_event_status("active", "postponed"))
+        html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Concert du soir", "startDate":"2026-08-20T20:00:00+02:00",
+          "location":{"name":"Arènes","geo":{"latitude":43.89,"longitude":-0.50}}
+        }</script>'''
+        active = extract_events(html, "A", "https://a.example/concert")[0]
+        cancelled = replace(active, source_url="https://b.example/concert", status="cancelled")
+        for ordered in ([active, cancelled], [cancelled, active]):
+            database = sqlite3.connect(":memory:")
+            database.executescript(SCHEMA)
+            persist(database, ordered, "2026-08-01T10:00:00+00:00")
+            self.assertEqual(
+                "cancelled", database.execute("SELECT status FROM events").fetchone()[0],
+            )
 
     def test_public_feed_hides_expired_active_but_keeps_recent_cancelled(self):
         now = datetime.fromisoformat("2026-08-13T12:00:00+00:00")

@@ -94,6 +94,9 @@ volontairement non configuré reste ignoré.
 Les sources officielles à volume régulier déclarent aussi un seuil minimal de
 candidats : une rupture de parsing est ainsi détectée même si le total général
 du flux reste supérieur au seuil de publication.
+Lorsqu'un même événement vient de plusieurs sources, le statut le plus prudent
+est conservé (`annulé`, puis `reporté`, puis `actif`) indépendamment de l'ordre
+dans lequel les sources répondent.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
