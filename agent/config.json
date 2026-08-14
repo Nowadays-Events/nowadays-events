@@ -41,6 +41,7 @@
       "trust": "official",
       "url": "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/",
       "list_pages": 3,
+      "min_candidates": 10,
       "max_detail_pages": 36
     },
     {

@@ -179,6 +179,7 @@ class NowadaysAgentTests(unittest.TestCase):
         source = next(item for item in config["sources"] if item["name"] == "Mont de Marsan Tourisme")
         self.assertGreaterEqual(source.get("list_pages", 1), 3)
         self.assertGreaterEqual(source.get("max_detail_pages", 0), 36)
+        self.assertGreaterEqual(source.get("min_candidates", 0), 10)
 
     def test_extracts_armagnac_html_period_address_and_coordinates(self):
         body = '''

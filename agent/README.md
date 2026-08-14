@@ -91,6 +91,9 @@ nombre de fiches trouvées, nombre retenu dans le rayon et nombre d’échecs.
 Une source configurée dont les identifiants sont refusés ouvre également une
 alerte administrateur et place l’état global en `attention` ; un connecteur
 volontairement non configuré reste ignoré.
+Les sources officielles à volume régulier déclarent aussi un seuil minimal de
+candidats : une rupture de parsing est ainsi détectée même si le total général
+du flux reste supérieur au seuil de publication.
 
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
