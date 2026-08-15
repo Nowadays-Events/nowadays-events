@@ -19,6 +19,7 @@ import sys
 import time
 import unicodedata
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from urllib.error import URLError
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -673,6 +674,18 @@ def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Eve
     return event_from_json(node, source_name, page_url)
 
 
+def extract_detail_events(
+    source_type: str, body: str, source_name: str, detail_url: str,
+) -> list[Event]:
+    if source_type == "armagnac_html":
+        event = extract_armagnac_event(body, source_name, detail_url)
+        return [event] if event else []
+    if source_type == "biscarrosse_html":
+        event = extract_biscarrosse_event(body, source_name, detail_url)
+        return [event] if event else []
+    return extract_events(body, source_name, detail_url)
+
+
 def fetch(url: str, timeout: int = 20) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -1046,24 +1059,26 @@ def run(
                             break
                     if len(source_detail_links) >= page_limit:
                         break
-                for detail_url in source_detail_links if source_type != "dax_embedded" else []:
-                    if time.monotonic() >= deadline:
-                        failures.append(f"{source['name']}: durée maximale atteinte")
-                        break
+                detail_urls = source_detail_links if source_type != "dax_embedded" else []
+
+                def fetch_detail(detail_url: str) -> tuple[list[Event], Exception | None]:
+                    remaining = int(deadline - time.monotonic())
+                    if remaining <= 0:
+                        return [], TimeoutError("durée maximale atteinte")
                     try:
-                        timeout = min(20, max(1, int(deadline - time.monotonic())))
+                        timeout = min(15, max(1, remaining))
                         detail_body = fetch(detail_url, timeout=timeout)
-                        if source_type == "armagnac_html":
-                            event = extract_armagnac_event(detail_body, source["name"], detail_url)
-                            if event:
-                                candidates.append(event)
-                        elif source_type == "biscarrosse_html":
-                            event = extract_biscarrosse_event(detail_body, source["name"], detail_url)
-                            if event:
-                                candidates.append(event)
-                        else:
-                            candidates.extend(extract_events(detail_body, source["name"], detail_url))
+                        return extract_detail_events(source_type, detail_body, source["name"], detail_url), None
                     except Exception as error:
+                        return [], error
+
+                workers = min(max(1, int(source.get("detail_workers", 4))), len(detail_urls)) if detail_urls else 1
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    detail_results = executor.map(fetch_detail, detail_urls)
+                    for detail_url, (detail_events, error) in zip(detail_urls, detail_results):
+                        candidates.extend(detail_events)
+                        if error is None:
+                            continue
                         source_failure_count += 1
                         failures.append(f"{source['name']} ({detail_url}): {error}")
             else:

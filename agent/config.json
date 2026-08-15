@@ -89,6 +89,7 @@
       "detail_path_tokens": ["/agenda/"],
       "list_pages": 2,
       "list_page_template": "https://www.ville-biscarrosse.fr/systeme/agenda/page/{page}/",
+      "detail_workers": 4,
       "min_candidates": 20,
       "max_detail_pages": 40
     },

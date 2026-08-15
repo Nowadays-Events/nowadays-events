@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -350,6 +350,12 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertIn("61 Rue", event.address)
         self.assertEqual("2026-08-29T08:00:00+00:00", event.start_at)
         self.assertEqual("free", event.price_type)
+        self.assertEqual(
+            [event],
+            extract_detail_events(
+                "biscarrosse_html", body, "Ville de Biscarrosse", "https://example.org/agenda/forum/",
+            ),
+        )
 
     def test_biscarrosse_source_completes_coastal_coverage_without_expanding_radius(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
@@ -358,6 +364,7 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("biscarrosse_html", source["type"])
         self.assertEqual(["Biscarrosse"], source["coverage_areas"])
         self.assertEqual(2, source["list_pages"])
+        self.assertEqual(4, source["detail_workers"])
         self.assertEqual(
             "https://www.ville-biscarrosse.fr/systeme/agenda/page/2/",
             listing_page_url(source, 2),
