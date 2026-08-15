@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -356,6 +356,35 @@ class NowadaysAgentTests(unittest.TestCase):
                 "biscarrosse_html", body, "Ville de Biscarrosse", "https://example.org/agenda/forum/",
             ),
         )
+
+    def test_geocodes_biscarrosse_event_only_when_map_coordinates_are_missing(self):
+        body = '''
+        <meta name="description" content="Le 30/08/2026 De 11:00 à 12:00" />
+        <h1 class="cover__title">Concert sur la plage</h1>
+        <h2 class="date-event__title">Le dimanche 30 août 2026</h2>
+        <p class="listing__location"><strong>Plage sud</strong>40600 Biscarrosse</p>
+        '''
+        queries = []
+        event = extract_biscarrosse_event(
+            body, "Ville de Biscarrosse", "https://example.org/agenda/concert/",
+            geocode=lambda query: queries.append(query) or (44.44, -1.25),
+        )
+        self.assertIsNotNone(event)
+        self.assertEqual((44.44, -1.25), (event.latitude, event.longitude))
+        self.assertIn("Plage sud", queries[0])
+
+    def test_geoplatform_result_requires_expected_city_and_score(self):
+        valid = {"features": [{
+            "geometry": {"coordinates": [-1.168468, 44.392588]},
+            "properties": {"city": "Biscarrosse", "score": 0.72},
+        }]}
+        self.assertEqual((44.392588, -1.168468), geocode_coordinates(valid, "Biscarrosse"))
+        wrong_city = json.loads(json.dumps(valid))
+        wrong_city["features"][0]["properties"]["city"] = "Bordeaux"
+        self.assertIsNone(geocode_coordinates(wrong_city, "Biscarrosse"))
+        low_score = json.loads(json.dumps(valid))
+        low_score["features"][0]["properties"]["score"] = 0.2
+        self.assertIsNone(geocode_coordinates(low_score, "Biscarrosse"))
 
     def test_biscarrosse_source_completes_coastal_coverage_without_expanding_radius(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))

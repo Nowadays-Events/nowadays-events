@@ -25,8 +25,8 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Iterable
-from urllib.parse import urlsplit, urlunsplit
+from typing import Any, Callable, Iterable
+from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
@@ -581,7 +581,44 @@ def extract_armagnac_event(body: str, source_name: str, page_url: str) -> Event 
     return event_from_json(node, source_name, page_url)
 
 
-def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Event | None:
+def geocode_coordinates(
+    payload: dict[str, Any], expected_city: str, minimum_score: float = 0.55,
+) -> tuple[float, float] | None:
+    """Valide une réponse GeoJSON de la Géoplateforme avant utilisation."""
+    for feature in payload.get("features") or []:
+        properties = feature.get("properties") or {}
+        geometry = feature.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or []
+        if normalize(str(properties.get("city") or "")) != normalize(expected_city):
+            continue
+        if float(properties.get("score") or 0) < minimum_score or len(coordinates) < 2:
+            continue
+        longitude = parse_float(coordinates[0])
+        latitude = parse_float(coordinates[1])
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+    return None
+
+
+def geocode_french_address(
+    query: str, expected_city: str, timeout: int = 8,
+) -> tuple[float, float] | None:
+    parameters = urlencode({"q": query, "limit": 3})
+    request = urllib.request.Request(
+        f"https://data.geopf.fr/geocodage/search?{parameters}",
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read(1_000_000).decode("utf-8"))
+    return geocode_coordinates(payload, expected_city)
+
+
+def extract_biscarrosse_event(
+    body: str,
+    source_name: str,
+    page_url: str,
+    geocode: Callable[[str], tuple[float, float] | None] | None = None,
+) -> Event | None:
     """Extrait une fiche de l'agenda municipal de Biscarrosse.
 
     Le site n'expose pas de schema.org/Event, mais publie des coordonnées GPS
@@ -597,7 +634,7 @@ def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Eve
         r'<meta\b[^>]*name=["\']description["\'][^>]*content=["\'](.*?)["\']\s*/?>',
         body, re.IGNORECASE | re.DOTALL,
     )
-    if not title_match or not latitude_match or not longitude_match or not meta_match:
+    if not title_match or not meta_match:
         return None
 
     description = html_fragment_text(meta_match.group(1))
@@ -644,6 +681,14 @@ def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Eve
     venue_match = re.search(r'<strong\b[^>]*>(.*?)</strong>', location_html, re.IGNORECASE | re.DOTALL)
     venue = html_fragment_text(venue_match.group(1)) if venue_match else "Biscarrosse"
     address = html_fragment_text(re.sub(r'<strong\b[^>]*>.*?</strong>', "", location_html, flags=re.IGNORECASE | re.DOTALL))
+    latitude = parse_float(latitude_match.group(1)) if latitude_match else None
+    longitude = parse_float(longitude_match.group(1)) if longitude_match else None
+    if (latitude is None or longitude is None) and geocode and (venue or address):
+        coordinates = geocode(" ".join(part for part in (venue, address, "40600 Biscarrosse") if part))
+        if coordinates:
+            latitude, longitude = coordinates
+    if latitude is None or longitude is None:
+        return None
     intro_match = re.search(
         r'<p\b[^>]*class=["\'][^"\']*cover__intro[^"\']*["\'][^>]*>(.*?)</p>',
         body, re.IGNORECASE | re.DOTALL,
@@ -666,7 +711,7 @@ def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Eve
             "@type": "Place",
             "name": venue,
             "address": address,
-            "geo": {"latitude": latitude_match.group(1), "longitude": longitude_match.group(1)},
+            "geo": {"latitude": latitude, "longitude": longitude},
         },
     }
     if re.search(r'\bgratuit\b', body, re.IGNORECASE):
@@ -1068,6 +1113,16 @@ def run(
                     try:
                         timeout = min(15, max(1, remaining))
                         detail_body = fetch(detail_url, timeout=timeout)
+                        if source_type == "biscarrosse_html":
+                            event = extract_biscarrosse_event(
+                                detail_body,
+                                source["name"],
+                                detail_url,
+                                geocode=lambda query: geocode_french_address(
+                                    query, "Biscarrosse", timeout=min(8, max(1, remaining)),
+                                ),
+                            )
+                            return ([event] if event else []), None
                         return extract_detail_events(source_type, detail_body, source["name"], detail_url), None
                     except Exception as error:
                         return [], error
