@@ -29,14 +29,48 @@ class NowadaysAgentTests(unittest.TestCase):
             ],
         }
         reports = [
-            {"name": "Côte sud", "status": "ok", "reachable": True},
+            {"name": "Côte sud", "status": "ok", "reachable": True,
+             "accepted_in_target_radius": 4, "preview_outside_current_radius": 2},
             {"name": "Côte nord", "status": "credentials_invalid", "reachable": False},
         ]
         blocked = coverage_readiness(config, reports)
         self.assertFalse(blocked["expansion_ready"])
         self.assertEqual(["Mimizan"], blocked["missing_areas"])
-        reports[1] = {"name": "Côte nord", "status": "ok", "reachable": True}
-        self.assertTrue(coverage_readiness(config, reports)["expansion_ready"])
+        reports[1] = {"name": "Côte nord", "status": "ok", "reachable": True,
+                      "accepted_in_target_radius": 3, "preview_outside_current_radius": 3}
+        ready = coverage_readiness(config, reports)
+        self.assertTrue(ready["expansion_ready"])
+        self.assertEqual(5, ready["preview_events_outside_current_radius"])
+
+    def test_coverage_readiness_ignores_unrelated_optional_source_failures(self):
+        config = {
+            "radius_km": 50,
+            "expansion_plan": {"target_radius_km": 100, "required_areas": ["Biscarrosse"]},
+            "sources": [
+                {"name": "API optionnelle"},
+                {"name": "Ville de Biscarrosse", "coverage_areas": ["Biscarrosse"]},
+            ],
+        }
+        reports = [
+            {"name": "API optionnelle", "status": "credentials_invalid", "reachable": False},
+            {"name": "Ville de Biscarrosse", "status": "ok", "reachable": True,
+             "accepted_in_target_radius": 12, "preview_outside_current_radius": 12},
+        ]
+        readiness = coverage_readiness(config, reports)
+        self.assertTrue(readiness["expansion_ready"])
+        self.assertEqual([], readiness["blocked_sources"])
+
+    def test_coverage_readiness_requires_real_events_in_target_radius(self):
+        config = {
+            "radius_km": 50,
+            "expansion_plan": {"target_radius_km": 100, "required_areas": ["Biscarrosse"]},
+            "sources": [{"name": "Ville de Biscarrosse", "coverage_areas": ["Biscarrosse"]}],
+        }
+        reports = [{"name": "Ville de Biscarrosse", "status": "ok", "reachable": True,
+                    "accepted_in_target_radius": 0, "preview_outside_current_radius": 0}]
+        readiness = coverage_readiness(config, reports)
+        self.assertFalse(readiness["expansion_ready"])
+        self.assertEqual(["Biscarrosse"], readiness["missing_areas"])
 
     def test_timeout_is_a_transient_network_error(self):
         self.assertTrue(is_transient_network_error(TimeoutError("timed out")))

@@ -9,10 +9,12 @@ class ManageCoverageTests(unittest.TestCase):
             "required_areas": ["Dax", "Mimizan", "Biscarrosse"],
             "current_radius_km": 50,
             "target_radius_km": 100,
+            "preview_events_outside_current_radius": 27,
         })
         self.assertIn("Dax, Mimizan, Biscarrosse", body)
         self.assertIn("50 km", body)
         self.assertIn("100 km", body)
+        self.assertIn("27 événement(s)", body)
         self.assertIn("validation humaine", body)
         self.assertIn(MARKER, body)
 

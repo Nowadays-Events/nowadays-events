@@ -16,9 +16,11 @@ MARKER = "xymis-coverage-expansion-ready"
 
 def notification_body(readiness: dict) -> str:
     areas = ", ".join(readiness.get("required_areas") or [])
+    preview_count = int(readiness.get("preview_events_outside_current_radius") or 0)
     return f"""## Extension géographique prête
 
 Les sources requises pour **{areas}** sont maintenant disponibles et saines.
+Le mode d'observation a détecté **{preview_count} événement(s)** au-delà du rayon actuel.
 Le rayon peut être étudié pour passer de **{readiness.get('current_radius_km')} km** à
 **{readiness.get('target_radius_km')} km**, après un dernier contrôle visuel des regroupements sur la carte.
 

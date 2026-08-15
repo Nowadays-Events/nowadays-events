@@ -954,12 +954,21 @@ def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, An
     reports_by_name = {report.get("name"): report for report in source_reports}
     covered_areas: set[str] = set()
     blocked_sources: list[str] = []
+    preview_events = 0
     for source in config.get("sources", []):
+        source_areas = set(source.get("coverage_areas") or []) & required_areas
+        if not source_areas:
+            continue
         report = reports_by_name.get(source.get("name"), {})
-        if report.get("status") == "ok" and report.get("reachable"):
-            covered_areas.update(source.get("coverage_areas") or [])
+        target_count = report.get("accepted_in_target_radius")
+        has_target_events = target_count is None or int(target_count) > 0
+        if report.get("status") == "ok" and report.get("reachable") and has_target_events:
+            covered_areas.update(source_areas)
+            preview_events += int(report.get("preview_outside_current_radius") or 0)
         elif report.get("status") in {"degraded", "credentials_invalid", "transient_error"}:
             blocked_sources.append(str(source.get("name")))
+        elif report.get("reachable") and not has_target_events:
+            blocked_sources.append(f"{source.get('name')} (aucun événement dans le rayon cible)")
     missing_areas = sorted(required_areas - covered_areas)
     return {
         "current_radius_km": config.get("radius_km"),
@@ -968,6 +977,7 @@ def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, An
         "covered_areas": sorted(covered_areas & required_areas),
         "missing_areas": missing_areas,
         "blocked_sources": blocked_sources,
+        "preview_events_outside_current_radius": preview_events,
         "expansion_ready": bool(required_areas) and not missing_areas and not blocked_sources,
     }
 
@@ -983,6 +993,7 @@ def run(
     config = json.loads(config_path.read_text(encoding="utf-8"))
     center = config["center"]
     radius = float(config["radius_km"])
+    target_radius = float((config.get("expansion_plan") or {}).get("target_radius_km") or radius)
     collected: list[Event] = []
     failures: list[str] = []
     warnings: list[str] = []
@@ -993,6 +1004,7 @@ def run(
         source_failure_count = 0
         source_candidate_count = 0
         source_accepted_count = 0
+        source_target_count = 0
         source_reachable = False
         source_status = "ok"
         if time.monotonic() >= deadline:
@@ -1070,6 +1082,11 @@ def run(
             accepted = [event for event in candidates
                 if distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude) <= radius]
             source_accepted_count = len(accepted)
+            source_target_count = sum(
+                distance_km(center["latitude"], center["longitude"], event.latitude, event.longitude)
+                <= target_radius
+                for event in candidates
+            )
             collected.extend(accepted)
         except MissingCredentials as error:
             source_status = "credentials_missing"
@@ -1093,6 +1110,8 @@ def run(
             "reachable": source_reachable,
             "candidates": source_candidate_count,
             "accepted_in_radius": source_accepted_count,
+            "accepted_in_target_radius": source_target_count,
+            "preview_outside_current_radius": max(0, source_target_count - source_accepted_count),
             "failures": source_failure_count,
             "status": source_status if source_failure_count == 0 else "degraded",
         })
