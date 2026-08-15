@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -323,7 +323,19 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual(50, config["radius_km"])
         self.assertEqual("biscarrosse_html", source["type"])
         self.assertEqual(["Biscarrosse"], source["coverage_areas"])
-        self.assertGreaterEqual(source["min_candidates"], 10)
+        self.assertEqual(2, source["list_pages"])
+        self.assertEqual(
+            "https://www.ville-biscarrosse.fr/systeme/agenda/page/2/",
+            listing_page_url(source, 2),
+        )
+        self.assertGreaterEqual(source["min_candidates"], 20)
+
+    def test_default_listing_page_url_keeps_existing_query_pagination(self):
+        source = {"url": "https://example.org/agenda/?category=music"}
+        self.assertEqual(
+            "https://example.org/agenda/?category=music&listpage=3",
+            listing_page_url(source, 3),
+        )
 
     def test_persist_merges_same_fingerprint_and_keeps_sources(self):
         html = """

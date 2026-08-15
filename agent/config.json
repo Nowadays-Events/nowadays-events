@@ -87,8 +87,10 @@
       "url": "https://www.ville-biscarrosse.fr/systeme/agenda/",
       "coverage_areas": ["Biscarrosse"],
       "detail_path_tokens": ["/agenda/"],
-      "min_candidates": 10,
-      "max_detail_pages": 24
+      "list_pages": 2,
+      "list_page_template": "https://www.ville-biscarrosse.fr/systeme/agenda/page/{page}/",
+      "min_candidates": 20,
+      "max_detail_pages": 40
     },
     {
       "name": "Ville de Saint-Sever",

@@ -707,6 +707,15 @@ def detail_links(
     return accepted
 
 
+def listing_page_url(source: dict[str, Any], page: int) -> str:
+    """Construit une page de liste selon le mécanisme propre à la source."""
+    template = str(source.get("list_page_template") or "").strip()
+    if template:
+        return template.format(page=page)
+    separator = "&" if "?" in source["url"] else "?"
+    return f"{source['url']}{separator}listpage={page}"
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     external_id TEXT PRIMARY KEY,
@@ -1004,8 +1013,7 @@ def run(
                 for list_page in range(2, int(source.get("list_pages", 1)) + 1):
                     if time.monotonic() >= deadline:
                         break
-                    separator = "&" if "?" in source["url"] else "?"
-                    listing_url = f"{source['url']}{separator}listpage={list_page}"
+                    listing_url = listing_page_url(source, list_page)
                     try:
                         timeout = min(20, max(1, int(deadline - time.monotonic())))
                         listing_bodies.append(fetch(listing_url, timeout=timeout))
