@@ -31,7 +31,9 @@ fun EventMap(
         MapLibre.getInstance(context)
         MapView(context).also { view ->
             view.onCreate(null)
-            view.getMapAsync(controller::attach)
+            view.getMapAsync { map ->
+                controller.attach(map, context.resources.displayMetrics.density)
+            }
         }
     }
 

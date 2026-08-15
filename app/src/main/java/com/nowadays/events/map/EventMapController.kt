@@ -13,6 +13,7 @@ import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventStatus
 import kotlin.math.floor
 import kotlin.math.min
+import kotlin.math.roundToInt
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -74,10 +75,15 @@ class EventMapController(
     private var clusterExpansionZoom: Double? = null
     private var awaitingClusterFrame = false
 
-    fun attach(mapLibreMap: MapLibreMap) {
+    fun attach(mapLibreMap: MapLibreMap, displayDensity: Float) {
         map = mapLibreMap
         mapLibreMap.uiSettings.compassGravity = Gravity.TOP or Gravity.END
-        mapLibreMap.uiSettings.setCompassMargins(0, 190, 20, 0)
+        mapLibreMap.uiSettings.setCompassMargins(
+            0,
+            compassTopMarginPx(displayDensity),
+            compassEndMarginPx(displayDensity),
+            0,
+        )
         mapLibreMap.cameraPosition = CameraPosition.Builder().target(initialCenter).zoom(initialZoom).build()
         mapLibreMap.addOnCameraIdleListener {
             mapLibreMap.cameraPosition.target?.let { onCameraChanged(it, mapLibreMap.cameraPosition.zoom) }
@@ -588,3 +594,7 @@ class EventMapController(
         private val DEFAULT_CENTER = LatLng(48.8566, 2.3522)
     }
 }
+
+internal fun compassTopMarginPx(displayDensity: Float): Int = (112f * displayDensity).roundToInt()
+
+internal fun compassEndMarginPx(displayDensity: Float): Int = (16f * displayDensity).roundToInt()
