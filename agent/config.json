@@ -80,6 +80,17 @@
       "max_detail_pages": 0
     },
     {
+      "name": "Ville de Biscarrosse — agenda officiel",
+      "type": "biscarrosse_html",
+      "priority": 100,
+      "trust": "official",
+      "url": "https://www.ville-biscarrosse.fr/systeme/agenda/",
+      "coverage_areas": ["Biscarrosse"],
+      "detail_path_tokens": ["/agenda/"],
+      "min_candidates": 10,
+      "max_detail_pages": 24
+    },
+    {
       "name": "Ville de Saint-Sever",
       "type": "jsonld",
       "priority": 100,

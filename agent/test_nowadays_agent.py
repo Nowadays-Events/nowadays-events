@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_events, hydrate_previous_feed, is_transient_network_error, likely_duplicate, mark_unverified, merge_event_status, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -296,6 +296,34 @@ class NowadaysAgentTests(unittest.TestCase):
         source = next(item for item in config["sources"] if item["name"].startswith("Grand Dax"))
         self.assertEqual("dax_embedded", source["type"])
         self.assertEqual(["Dax"], source["coverage_areas"])
+
+    def test_extracts_biscarrosse_event_with_precise_map_coordinates(self):
+        body = '''
+        <meta name="description" content="Le 29/08/2026 De 10:00 à 16:00 Arcanson" />
+        <h1 class="cover__title">Forum des associations</h1>
+        <p class="cover__text cover__intro">Rencontrez les associations locales.</p>
+        <h2 class="date-event__title">Le samedi 29 août 2026</h2>
+        <p class="listing__location"><strong>Arcanson</strong>
+          61 Rue du Lt de Vaisseau Paris<br>40600 Biscarrosse</p>
+        <div class="map" data-lat="44.3965988" data-long="-1.1664309"></div>
+        <p>Tarif(s) Gratuit</p>
+        '''
+        event = extract_biscarrosse_event(body, "Ville de Biscarrosse", "https://example.org/agenda/forum/")
+        self.assertIsNotNone(event)
+        self.assertEqual("Forum des associations", event.title)
+        self.assertEqual((44.3965988, -1.1664309), (event.latitude, event.longitude))
+        self.assertEqual("Arcanson", event.venue)
+        self.assertIn("61 Rue", event.address)
+        self.assertEqual("2026-08-29T08:00:00+00:00", event.start_at)
+        self.assertEqual("free", event.price_type)
+
+    def test_biscarrosse_source_completes_coastal_coverage_without_expanding_radius(self):
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        source = next(item for item in config["sources"] if item["name"].startswith("Ville de Biscarrosse"))
+        self.assertEqual(50, config["radius_km"])
+        self.assertEqual("biscarrosse_html", source["type"])
+        self.assertEqual(["Biscarrosse"], source["coverage_areas"])
+        self.assertGreaterEqual(source["min_candidates"], 10)
 
     def test_persist_merges_same_fingerprint_and_keeps_sources(self):
         html = """

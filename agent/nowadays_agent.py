@@ -580,6 +580,99 @@ def extract_armagnac_event(body: str, source_name: str, page_url: str) -> Event 
     return event_from_json(node, source_name, page_url)
 
 
+def extract_biscarrosse_event(body: str, source_name: str, page_url: str) -> Event | None:
+    """Extrait une fiche de l'agenda municipal de Biscarrosse.
+
+    Le site n'expose pas de schema.org/Event, mais publie des coordonnées GPS
+    précises et un résumé homogène pour chaque manifestation.
+    """
+    title_match = re.search(
+        r'<h1\b[^>]*class=["\'][^"\']*cover__title[^"\']*["\'][^>]*>(.*?)</h1>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    latitude_match = re.search(r'\bdata-lat=["\']([+-]?\d+(?:\.\d+)?)["\']', body, re.IGNORECASE)
+    longitude_match = re.search(r'\bdata-long=["\']([+-]?\d+(?:\.\d+)?)["\']', body, re.IGNORECASE)
+    meta_match = re.search(
+        r'<meta\b[^>]*name=["\']description["\'][^>]*content=["\'](.*?)["\']\s*/?>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    if not title_match or not latitude_match or not longitude_match or not meta_match:
+        return None
+
+    description = html_fragment_text(meta_match.group(1))
+    explicit_dates = [
+        datetime(int(year), int(month), int(day), tzinfo=ZoneInfo("Europe/Paris"))
+        for day, month, year in re.findall(r'\b(\d{2})/(\d{2})/(20\d{2})\b', description)
+    ]
+    date_heading_match = re.search(
+        r'<h2\b[^>]*class=["\'][^"\']*date-event__title[^"\']*["\'][^>]*>(.*?)</h2>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    heading_dates: list[datetime] = []
+    if date_heading_match:
+        heading = normalize(html_fragment_text(date_heading_match.group(1)))
+        for day, month_name, year in re.findall(r'\b(\d{1,2})\s+([a-z]+)\s+(20\d{2})\b', heading):
+            month = french_month(month_name)
+            if month:
+                heading_dates.append(
+                    datetime(int(year), month, int(day), tzinfo=ZoneInfo("Europe/Paris"))
+                )
+    dates = explicit_dates or heading_dates
+    if not dates:
+        return None
+
+    time_match = re.search(
+        r'(?:De\s*)?(\d{1,2})[h:](\d{2})(?:\s*(?:a|à)\s*(\d{1,2})[h:](\d{2}))?',
+        description, re.IGNORECASE,
+    )
+    start_hour = int(time_match.group(1)) if time_match else 0
+    start_minute = int(time_match.group(2)) if time_match else 0
+    end_hour = int(time_match.group(3)) if time_match and time_match.group(3) else start_hour
+    end_minute = int(time_match.group(4)) if time_match and time_match.group(4) else start_minute
+    start = min(dates).replace(hour=start_hour, minute=start_minute)
+    end = max(dates).replace(hour=end_hour, minute=end_minute)
+    if len(heading_dates) >= 2:
+        start = min(start, heading_dates[0].replace(hour=start_hour, minute=start_minute))
+        end = max(end, heading_dates[-1].replace(hour=end_hour, minute=end_minute))
+
+    location_match = re.search(
+        r'<p\b[^>]*class=["\'][^"\']*listing__location[^"\']*["\'][^>]*>(.*?)</p>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    location_html = location_match.group(1) if location_match else ""
+    venue_match = re.search(r'<strong\b[^>]*>(.*?)</strong>', location_html, re.IGNORECASE | re.DOTALL)
+    venue = html_fragment_text(venue_match.group(1)) if venue_match else "Biscarrosse"
+    address = html_fragment_text(re.sub(r'<strong\b[^>]*>.*?</strong>', "", location_html, flags=re.IGNORECASE | re.DOTALL))
+    intro_match = re.search(
+        r'<p\b[^>]*class=["\'][^"\']*cover__intro[^"\']*["\'][^>]*>(.*?)</p>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    intro = html_fragment_text(intro_match.group(1)) if intro_match else description
+    now = datetime.now(ZoneInfo("Europe/Paris"))
+    next_occurrence = next((value for value in sorted(explicit_dates) if value.date() >= now.date()), None)
+    if not next_occurrence and start.date() <= now.date() <= end.date():
+        next_occurrence = now.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+    node = {
+        "@type": "Event",
+        "name": html_fragment_text(title_match.group(1)),
+        "description": intro,
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "url": page_url,
+        "occurrenceCount": max(len(set(explicit_dates)), 2 if start.date() != end.date() else 1),
+        "nextOccurrenceDate": next_occurrence.isoformat() if next_occurrence else None,
+        "location": {
+            "@type": "Place",
+            "name": venue,
+            "address": address,
+            "geo": {"latitude": latitude_match.group(1), "longitude": longitude_match.group(1)},
+        },
+    }
+    if re.search(r'\bgratuit\b', body, re.IGNORECASE):
+        node["offers"] = {"price": 0, "priceCurrency": "EUR"}
+    return event_from_json(node, source_name, page_url)
+
+
 def fetch(url: str, timeout: int = 20) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -899,7 +992,7 @@ def run(
         try:
             source_type = source.get("type", "jsonld")
             timeout = min(20, max(1, int(deadline - time.monotonic())))
-            if source_type in ("jsonld", "armagnac_html", "dax_embedded"):
+            if source_type in ("jsonld", "armagnac_html", "biscarrosse_html", "dax_embedded"):
                 body = fetch(source["url"], timeout=timeout)
                 candidates = (
                     extract_dax_events(body, source["name"], source["url"])
@@ -942,6 +1035,10 @@ def run(
                         detail_body = fetch(detail_url, timeout=timeout)
                         if source_type == "armagnac_html":
                             event = extract_armagnac_event(detail_body, source["name"], detail_url)
+                            if event:
+                                candidates.append(event)
+                        elif source_type == "biscarrosse_html":
+                            event = extract_biscarrosse_event(detail_body, source["name"], detail_url)
                             if event:
                                 candidates.append(event)
                         else:
