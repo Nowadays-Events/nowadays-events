@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -319,28 +320,55 @@ private fun FilterBar(
         TimeFilter.THIS_WEEKEND to "Ce week-end",
         TimeFilter.ALL_FUTURE to "Toutes les dates",
     )
-    LazyRow(modifier = modifier.fillMaxWidth().wrapContentSize().padding(8.dp)) {
-        items(labels) { (filter, label) ->
-            AssistChip(
-                onClick = { onSelected(filter) },
-                label = { Text(if (selected == filter) "✓ $label" else label) },
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-        }
-        item {
-            val formatter = DateTimeFormatter.ofPattern("dd/MM")
-            val customLabel = if (selected == TimeFilter.CUSTOM && customStartDate != null && customEndDate != null) {
-                if (customStartDate == customEndDate) customStartDate.format(formatter)
-                else "${customStartDate.format(formatter)} – ${customEndDate.format(formatter)}"
-            } else "Dates"
-            AssistChip(
-                onClick = onCalendarClick,
-                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                label = { Text(if (selected == TimeFilter.CUSTOM) "✓ $customLabel" else customLabel) },
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        tonalElevation = 3.dp,
+        shadowElevation = 4.dp,
+    ) {
+        LazyRow(Modifier.fillMaxWidth().wrapContentSize().padding(8.dp)) {
+            items(labels) { (filter, label) ->
+                val isSelected = selected == filter
+                AssistChip(
+                    onClick = { onSelected(filter) },
+                    label = { Text(if (isSelected) "✓ $label" else label) },
+                    colors = periodChipColors(isSelected),
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+            item {
+                val formatter = DateTimeFormatter.ofPattern("dd/MM")
+                val isSelected = selected == TimeFilter.CUSTOM
+                val customLabel = if (isSelected && customStartDate != null && customEndDate != null) {
+                    if (customStartDate == customEndDate) customStartDate.format(formatter)
+                    else "${customStartDate.format(formatter)} – ${customEndDate.format(formatter)}"
+                } else "Dates"
+                AssistChip(
+                    onClick = onCalendarClick,
+                    leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                    label = { Text(if (isSelected) "✓ $customLabel" else customLabel) },
+                    colors = periodChipColors(isSelected),
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun periodChipColors(selected: Boolean) = if (selected) {
+    AssistChipDefaults.assistChipColors(
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        leadingIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    )
+} else {
+    AssistChipDefaults.assistChipColors(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
