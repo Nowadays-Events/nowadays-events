@@ -373,6 +373,24 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual((44.44, -1.25), (event.latitude, event.longitude))
         self.assertIn("Plage sud", queries[0])
 
+    def test_geocodes_biscarrosse_location_without_specific_location_class(self):
+        body = '''
+        <meta name="description" content="Le 22/08/2026 De 11:00 à 19:00" />
+        <h1 class="cover__title">Bibliothèque vue sur mer</h1>
+        <h2 class="date-event__title">Du 06 juillet 2026 au 22 août 2026</h2>
+        <div><p class="listing__title"> Localisation </p>
+          Plage sud 40600 BISCARROSSE
+        </div>
+        '''
+        queries = []
+        event = extract_biscarrosse_event(
+            body, "Ville de Biscarrosse", "https://example.org/agenda/bibliotheque/",
+            geocode=lambda query: queries.append(query) or (44.438, -1.253),
+        )
+        self.assertIsNotNone(event)
+        self.assertIn("Plage sud 40600 BISCARROSSE", event.address)
+        self.assertIn("Plage sud", queries[0])
+
     def test_geoplatform_result_requires_expected_city_and_score(self):
         valid = {"features": [{
             "geometry": {"coordinates": [-1.168468, 44.392588]},
@@ -385,6 +403,12 @@ class NowadaysAgentTests(unittest.TestCase):
         low_score = json.loads(json.dumps(valid))
         low_score["features"][0]["properties"]["score"] = 0.2
         self.assertIsNone(geocode_coordinates(low_score, "Biscarrosse"))
+        approximate_place = json.loads(json.dumps(valid))
+        approximate_place["features"][0]["properties"]["score"] = 0.37
+        self.assertEqual(
+            (44.392588, -1.168468),
+            geocode_coordinates(approximate_place, "Biscarrosse"),
+        )
 
     def test_biscarrosse_source_completes_coastal_coverage_without_expanding_radius(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))

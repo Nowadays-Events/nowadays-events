@@ -582,7 +582,7 @@ def extract_armagnac_event(body: str, source_name: str, page_url: str) -> Event 
 
 
 def geocode_coordinates(
-    payload: dict[str, Any], expected_city: str, minimum_score: float = 0.55,
+    payload: dict[str, Any], expected_city: str, minimum_score: float = 0.35,
 ) -> tuple[float, float] | None:
     """Valide une réponse GeoJSON de la Géoplateforme avant utilisation."""
     for feature in payload.get("features") or []:
@@ -677,14 +677,21 @@ def extract_biscarrosse_event(
         r'<p\b[^>]*class=["\'][^"\']*listing__location[^"\']*["\'][^>]*>(.*?)</p>',
         body, re.IGNORECASE | re.DOTALL,
     )
+    if not location_match:
+        location_match = re.search(
+            r'<p\b[^>]*class=["\'][^"\']*listing__title[^"\']*["\'][^>]*>\s*Localisation\s*</p>'
+            r'(.*?)</div>',
+            body, re.IGNORECASE | re.DOTALL,
+        )
     location_html = location_match.group(1) if location_match else ""
     venue_match = re.search(r'<strong\b[^>]*>(.*?)</strong>', location_html, re.IGNORECASE | re.DOTALL)
     venue = html_fragment_text(venue_match.group(1)) if venue_match else "Biscarrosse"
     address = html_fragment_text(re.sub(r'<strong\b[^>]*>.*?</strong>', "", location_html, flags=re.IGNORECASE | re.DOTALL))
     latitude = parse_float(latitude_match.group(1)) if latitude_match else None
     longitude = parse_float(longitude_match.group(1)) if longitude_match else None
-    if (latitude is None or longitude is None) and geocode and (venue or address):
-        coordinates = geocode(" ".join(part for part in (venue, address, "40600 Biscarrosse") if part))
+    if (latitude is None or longitude is None) and geocode and address:
+        venue_query = venue if normalize(venue) != normalize("Biscarrosse") else ""
+        coordinates = geocode(" ".join(part for part in (venue_query, address, "40600 Biscarrosse") if part))
         if coordinates:
             latitude, longitude = coordinates
     if latitude is None or longitude is None:
