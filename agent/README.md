@@ -1,7 +1,7 @@
 # Agent local Xymis Events
 
 Ce prototype collecte les événements structurés `schema.org/Event`, limite les
-résultats à 50 km de Mont-de-Marsan, fusionne les doublons, conserve toutes les
+résultats à 100 km de Mont-de-Marsan, fusionne les doublons, conserve toutes les
 URL sources et détecte les statuts d’annulation publiés par les organisateurs.
 
 Il n’écrit jamais directement dans la base du téléphone. Il produit
@@ -102,7 +102,7 @@ prochaine occurrence est absente, passée ou située après la fin annoncée.
 Les liens de source sont limités aux URL web absolues `http`/`https` afin qu'une
 fiche collectée ne puisse pas injecter un lien dangereux dans l'application.
 Un second calcul géographique indépendant bloque aussi le déploiement si une
-fiche sort du rayon de 50 km autour de Mont-de-Marsan, ce qui empêche notamment
+fiche sort du rayon de 100 km autour de Mont-de-Marsan, ce qui empêche notamment
 le retour accidentel d'anciens événements de démonstration situés à Paris.
 Le centre et le rayon de ce contrôle sont lus dans `config.json`, comme ceux du
 collecteur : une future extension vers la côte ne nécessitera donc qu'un seul
@@ -122,7 +122,7 @@ validation humaine explicite.
 
 La source officielle de Mimizan est collectée en préparation de cette extension.
 Elle est marquée comme couverture de Mimizan, mais ses événements restent soumis
-au rayon public actuel de 50 km tant que l'extension n'est pas validée.
+au rayon public actuel de 100 km, extension vers la côte landaise validée.
 L'agenda officiel du Grand Dax est lu depuis son tableau Tourinsoft embarqué ; il
 reste soumis au même filtre géographique et compte comme couverture de Dax.
 

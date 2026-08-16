@@ -295,10 +295,10 @@ class NowadaysAgentTests(unittest.TestCase):
             detail_links(body, "https://example.org/agenda/", 10, ["/offres/"]),
         )
 
-    def test_mimizan_official_source_is_prepared_without_expanding_radius(self):
+    def test_mimizan_official_source_is_in_expanded_coastal_radius(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
         source = next(item for item in config["sources"] if item["name"].startswith("Mimizan Tourisme"))
-        self.assertEqual(50, config["radius_km"])
+        self.assertEqual(100, config["radius_km"])
         self.assertEqual(["Mimizan"], source["coverage_areas"])
         self.assertIn("/offres/", source["detail_path_tokens"])
         self.assertGreaterEqual(source["min_candidates"], 10)
@@ -410,10 +410,10 @@ class NowadaysAgentTests(unittest.TestCase):
             geocode_coordinates(approximate_place, "Biscarrosse"),
         )
 
-    def test_biscarrosse_source_completes_coastal_coverage_without_expanding_radius(self):
+    def test_biscarrosse_source_completes_expanded_coastal_coverage(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
         source = next(item for item in config["sources"] if item["name"].startswith("Ville de Biscarrosse"))
-        self.assertEqual(50, config["radius_km"])
+        self.assertEqual(100, config["radius_km"])
         self.assertEqual("biscarrosse_html", source["type"])
         self.assertEqual(["Biscarrosse"], source["coverage_areas"])
         self.assertEqual(2, source["list_pages"])
@@ -423,6 +423,18 @@ class NowadaysAgentTests(unittest.TestCase):
             listing_page_url(source, 2),
         )
         self.assertGreaterEqual(source["min_candidates"], 20)
+
+    def test_coastal_expansion_is_marked_active_once_radius_reaches_target(self):
+        config = {
+            "radius_km": 100,
+            "expansion_plan": {"target_radius_km": 100, "required_areas": ["Biscarrosse"]},
+            "sources": [{"name": "Ville de Biscarrosse", "coverage_areas": ["Biscarrosse"]}],
+        }
+        reports = [{"name": "Ville de Biscarrosse", "status": "ok", "reachable": True,
+                    "accepted_in_target_radius": 23}]
+        readiness = coverage_readiness(config, reports)
+        self.assertTrue(readiness["expansion_active"])
+        self.assertFalse(readiness["expansion_ready"])
 
     def test_default_listing_page_url_keeps_existing_query_pagination(self):
         source = {"url": "https://example.org/agenda/?category=music"}

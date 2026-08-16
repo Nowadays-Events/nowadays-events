@@ -1015,6 +1015,9 @@ def collection_status(
 
 def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, Any]]) -> dict[str, Any]:
     plan = config.get("expansion_plan") or {}
+    current_radius = float(config.get("radius_km") or 0)
+    target_radius = float(plan.get("target_radius_km") or 0)
+    expansion_active = bool(target_radius) and current_radius >= target_radius
     required_areas = set(plan.get("required_areas") or [])
     reports_by_name = {report.get("name"): report for report in source_reports}
     covered_areas: set[str] = set()
@@ -1043,7 +1046,10 @@ def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, An
         "missing_areas": missing_areas,
         "blocked_sources": blocked_sources,
         "preview_events_outside_current_radius": preview_events,
-        "expansion_ready": bool(required_areas) and not missing_areas and not blocked_sources,
+        "expansion_active": expansion_active,
+        "expansion_ready": (
+            bool(required_areas) and not expansion_active and not missing_areas and not blocked_sources
+        ),
     }
 
 
