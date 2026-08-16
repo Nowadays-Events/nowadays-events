@@ -955,6 +955,44 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
     return end.date() >= now.date()
 
 
+def normalize_export_schedule(item: dict[str, Any], reference: datetime) -> dict[str, Any]:
+    """Rend les périodes sans horaires et leurs récurrences cohérentes à l'export."""
+    normalized_item = dict(item)
+    try:
+        start = datetime.fromisoformat(str(item.get("start_at") or "").replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(item.get("end_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return normalized_item
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    # Les sources touristiques utilisent 00:00 quand aucun horaire n'est
+    # fourni. La manifestation reste alors valable pendant toute la journée.
+    if end.hour == 0 and end.minute == 0 and end.second == 0:
+        end = end + timedelta(days=1) - timedelta(seconds=1)
+        normalized_item["end_at"] = end.isoformat()
+
+    try:
+        occurrence_count = int(item.get("occurrence_count") or 1)
+    except (TypeError, ValueError):
+        occurrence_count = 1
+    if occurrence_count <= 1 or item.get("status", "active") not in {"active", "unverified"}:
+        return normalized_item
+    try:
+        next_occurrence = datetime.fromisoformat(
+            str(item.get("next_occurrence_at") or "").replace("Z", "+00:00")
+        )
+        if next_occurrence.tzinfo is None:
+            next_occurrence = next_occurrence.replace(tzinfo=timezone.utc)
+    except ValueError:
+        next_occurrence = None
+    if next_occurrence is None or next_occurrence < reference or next_occurrence > end:
+        replacement = max(reference, start)
+        normalized_item["next_occurrence_at"] = replacement.isoformat() if replacement <= end else None
+    return normalized_item
+
+
 def export_feed(connection: sqlite3.Connection, output: Path, now: datetime | None = None) -> int:
     reference = now or datetime.now(timezone.utc)
     rows = connection.execute(
@@ -974,6 +1012,7 @@ def export_feed(connection: sqlite3.Connection, output: Path, now: datetime | No
     for row in rows:
         item = dict(zip(columns, row))
         item["source_urls"] = item["source_urls"].splitlines()
+        item = normalize_export_schedule(item, reference)
         if should_export_event(item, reference):
             payload.append(item)
     output.parent.mkdir(parents=True, exist_ok=True)

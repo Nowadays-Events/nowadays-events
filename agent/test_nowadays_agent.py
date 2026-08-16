@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -523,6 +523,30 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertFalse(should_export_event(expired, now))
         self.assertTrue(should_export_event(cancelled, now))
         self.assertTrue(should_export_event(recurring, now))
+
+    def test_export_schedule_refreshes_active_recurrence_and_full_day_end(self):
+        now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")
+        item = {
+            "start_at": "2026-07-01T00:00:00+00:00",
+            "end_at": "2026-08-16T00:00:00+00:00",
+            "status": "active",
+            "occurrence_count": 12,
+            "next_occurrence_at": "2026-08-09T00:00:00+00:00",
+        }
+        normalized = normalize_export_schedule(item, now)
+        self.assertEqual("2026-08-16T23:59:59+00:00", normalized["end_at"])
+        self.assertEqual(now.isoformat(), normalized["next_occurrence_at"])
+
+    def test_export_schedule_keeps_valid_future_occurrence(self):
+        now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")
+        item = {
+            "start_at": "2026-07-01T10:00:00+00:00",
+            "end_at": "2026-09-01T18:00:00+00:00",
+            "status": "active",
+            "occurrence_count": 4,
+            "next_occurrence_at": "2026-08-20T10:00:00+00:00",
+        }
+        self.assertEqual(item["next_occurrence_at"], normalize_export_schedule(item, now)["next_occurrence_at"])
 
     def test_previous_feed_becomes_unverified_without_becoming_cancelled(self):
         with tempfile.TemporaryDirectory() as directory:
