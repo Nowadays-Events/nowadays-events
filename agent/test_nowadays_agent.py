@@ -535,7 +535,7 @@ class NowadaysAgentTests(unittest.TestCase):
         }
         normalized = normalize_export_schedule(item, now)
         self.assertEqual("2026-08-16T23:59:59+00:00", normalized["end_at"])
-        self.assertEqual(now.isoformat(), normalized["next_occurrence_at"])
+        self.assertEqual("2026-08-16T23:59:59+00:00", normalized["next_occurrence_at"])
 
     def test_export_schedule_keeps_valid_future_occurrence(self):
         now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")
@@ -547,6 +547,17 @@ class NowadaysAgentTests(unittest.TestCase):
             "next_occurrence_at": "2026-08-20T10:00:00+00:00",
         }
         self.assertEqual(item["next_occurrence_at"], normalize_export_schedule(item, now)["next_occurrence_at"])
+
+    def test_expired_recurring_event_is_not_kept_for_the_rest_of_the_day(self):
+        now = datetime.fromisoformat("2026-08-16T18:00:00+00:00")
+        item = {
+            "start_at": "2026-08-01T10:00:00+00:00",
+            "end_at": "2026-08-16T17:00:00+00:00",
+            "status": "active", "occurrence_count": 4, "next_occurrence_at": None,
+        }
+        normalized = normalize_export_schedule(item, now)
+        self.assertIsNone(normalized["next_occurrence_at"])
+        self.assertFalse(should_export_event(normalized, now))
 
     def test_previous_feed_becomes_unverified_without_becoming_cancelled(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -952,6 +952,11 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
                 return True
         except ValueError:
             pass
+    try:
+        if int(item.get("occurrence_count") or 1) > 1:
+            return end >= now
+    except (TypeError, ValueError):
+        return False
     return end.date() >= now.date()
 
 
@@ -988,8 +993,11 @@ def normalize_export_schedule(item: dict[str, Any], reference: datetime) -> dict
     except ValueError:
         next_occurrence = None
     if next_occurrence is None or next_occurrence < reference or next_occurrence > end:
-        replacement = max(reference, start)
-        normalized_item["next_occurrence_at"] = replacement.isoformat() if replacement <= end else None
+        end_of_today = reference.replace(hour=23, minute=59, second=59, microsecond=0)
+        replacement = start if start > reference else min(end, end_of_today)
+        normalized_item["next_occurrence_at"] = (
+            replacement.isoformat() if reference <= replacement <= end else None
+        )
     return normalized_item
 
 
