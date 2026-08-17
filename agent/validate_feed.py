@@ -11,6 +11,14 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
+BROKEN_TEXT_MARKERS = ("\ufffd", "Ã", "â€", "ðŸ")
+
+
+def has_broken_encoding(value: object) -> bool:
+    text = str(value or "")
+    return any(marker in text for marker in BROKEN_TEXT_MARKERS)
+
+
 def parse_datetime(value: object) -> datetime:
     parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
@@ -83,6 +91,10 @@ def validate(
         identifiers.add(identifier)
         if not str(event.get("title") or "").strip():
             errors.append(f"{label}: titre manquant")
+        for field in ("title", "description", "venue", "address", "category"):
+            if has_broken_encoding(event.get(field)):
+                errors.append(f"{label}: encodage illisible dans {field}")
+                break
         end: datetime | None = None
         try:
             start = parse_datetime(event.get("start_at"))

@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from validate_feed import geographic_settings, validate
+from validate_feed import geographic_settings, has_broken_encoding, validate
 
 
 def event(identifier="one", start="2026-08-12T10:00:00+00:00", end="2026-08-12T12:00:00+00:00"):
@@ -71,6 +71,13 @@ class ValidateFeedTests(unittest.TestCase):
             {"events": [event(end="2026-08-11T12:00:00Z")]}, minimum_events=1, now=self.NOW,
         )
         self.assertTrue(any("fin antérieure" in error for error in errors))
+
+    def test_rejects_broken_french_text_encoding(self):
+        broken = {**event(), "title": "Biblioth�que vue sur mer"}
+        errors = validate({"events": [broken]}, minimum_events=1, now=self.NOW)
+        self.assertTrue(any("encodage illisible" in error for error in errors))
+        self.assertTrue(has_broken_encoding("FÃªte locale"))
+        self.assertFalse(has_broken_encoding("Fête locale à Biscarrosse"))
 
     def test_validates_next_recurring_occurrence(self):
         recurring = {
