@@ -168,15 +168,6 @@ class EventMapController(
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(target, zoom), 500)
     }
 
-    fun focus(event: Event) {
-        val mapLibreMap = map ?: return
-        val targetZoom = (mapLibreMap.cameraPosition.zoom + 0.7).coerceIn(13.0, 15.5)
-        mapLibreMap.animateCamera(
-            CameraUpdateFactory.newLatLngZoom(LatLng(event.latitude, event.longitude), targetZoom),
-            420,
-        )
-    }
-
     fun frame(events: List<Event>) {
         if (events.isEmpty()) return
         if (events.size == 1 || events.map { it.latitude to it.longitude }.distinct().size == 1) {

@@ -115,10 +115,8 @@ fun MapScreen(
         }
     }
     LaunchedEffect(state.selectedEvent?.id, state.selectedIsMainEvent) {
-        state.selectedEvent?.let(controller::focus)
         if (state.selectedIsMainEvent) {
             viewModel.expandSelectedSource()
-            controller.frame(state.relatedEvents)
         }
     }
     Scaffold(
