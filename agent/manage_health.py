@@ -22,7 +22,7 @@ def gh(*arguments: str) -> str:
 def degraded_sources(payload: dict) -> list[dict]:
     return [
         source for source in payload.get("source_reports", [])
-        if source.get("status") in {"degraded", "credentials_invalid"}
+        if source.get("status") in {"warning", "error"}
     ]
 
 
@@ -37,7 +37,9 @@ def issue_body(payload: dict, sources: list[dict], identifier: str) -> str:
         status = source.get("status", "degraded")
         diagnosis = (
             "identifiants refusés — vérifier ou renouveler le secret GitHub"
-            if status == "credentials_invalid"
+            if source.get("reason") == "credentials_invalid"
+            else "collectes vides répétées"
+            if source.get("reason") == "repeated_empty_collection"
             else f"{source.get('failures', 0)} erreur(s)"
         )
         lines.append(

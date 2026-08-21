@@ -43,6 +43,9 @@ jobs:
           curl --fail --silent --show-error --max-time 15 \
             --output agent/output/previous-events.json \
             https://nowadays-events.github.io/nowadays-events/events.json || true
+          curl --fail --silent --show-error --max-time 15 \
+            --output agent/output/previous-health.json \
+            https://nowadays-events.github.io/nowadays-events/health.json || true
 
       - name: Collect events
         env:
@@ -51,7 +54,10 @@ jobs:
           HELLOASSO_CLIENT_SECRET: ${{ secrets.HELLOASSO_CLIENT_SECRET }}
           EVENTBRITE_PRIVATE_TOKEN: ${{ secrets.EVENTBRITE_PRIVATE_TOKEN }}
           EVENTBRITE_ORGANIZATION_IDS: ${{ secrets.EVENTBRITE_ORGANIZATION_IDS }}
-        run: python agent/nowadays_agent.py --max-runtime-seconds 180 --previous-feed agent/output/previous-events.json
+        run: >-
+          python agent/nowadays_agent.py --max-runtime-seconds 180
+          --previous-feed agent/output/previous-events.json
+          --previous-health agent/output/previous-health.json
 
       - name: Validate public feed
         run: >-

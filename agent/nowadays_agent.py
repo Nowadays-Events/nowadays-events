@@ -31,6 +31,7 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 from provider_sources import InvalidCredentials, MissingCredentials, collect_api_source
+from source_health import assess_observation, previous_report
 
 USER_AGENT = "XymisEventsAgent/0.1 (+local prototype)"
 CANCELLED_TOKENS = ("annulé", "annule", "cancelled", "canceled")
@@ -1053,9 +1054,11 @@ def collection_status(
 ) -> str:
     if failures:
         return "degraded"
+    if any(source.get("status") == "error" for source in source_reports):
+        return "degraded"
     if warnings:
         return "partial"
-    if any(source.get("status") == "credentials_invalid" for source in source_reports):
+    if any(source.get("status") == "warning" for source in source_reports):
         return "attention"
     return "ok"
 
@@ -1080,7 +1083,7 @@ def coverage_readiness(config: dict[str, Any], source_reports: list[dict[str, An
         if report.get("status") == "ok" and report.get("reachable") and has_target_events:
             covered_areas.update(source_areas)
             preview_events += int(report.get("preview_outside_current_radius") or 0)
-        elif report.get("status") in {"degraded", "credentials_invalid", "transient_error"}:
+        elif report.get("status") in {"warning", "error"}:
             blocked_sources.append(str(source.get("name")))
         elif report.get("reachable") and not has_target_events:
             blocked_sources.append(f"{source.get('name')} (aucun événement dans le rayon cible)")
@@ -1107,6 +1110,7 @@ def run(
     max_pages: int | None = None,
     max_runtime_seconds: int = 180,
     previous_feed_path: Path | None = None,
+    previous_health_path: Path | None = None,
 ) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     center = config["center"]
@@ -1117,6 +1121,12 @@ def run(
     warnings: list[str] = []
     deadline = time.monotonic() + max_runtime_seconds
     source_reports: list[dict[str, Any]] = []
+    previous_health: dict[str, Any] = {}
+    if previous_health_path and previous_health_path.exists():
+        try:
+            previous_health = json.loads(previous_health_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous_health = {}
     sources = sorted(config["sources"], key=lambda item: int(item.get("priority", 0)), reverse=True)
     for source in sources:
         source_failure_count = 0
@@ -1125,6 +1135,26 @@ def run(
         source_target_count = 0
         source_reachable = False
         source_status = "ok"
+        source_reason: str | None = None
+        previous_source_report = previous_report(previous_health, source["name"])
+        observation = {
+            "status": "ok", "reason": None,
+            "consecutive_empty_collections": int(previous_source_report.get("consecutive_empty_collections") or 0),
+            "last_nonzero_candidates": int(previous_source_report.get("last_nonzero_candidates") or 0),
+            "empty_warning_threshold": max(2, int(source.get("empty_warning_threshold", 3))),
+        }
+        if source.get("enabled", True) is False:
+            source_reports.append({
+                "name": source["name"], "type": source.get("type", "jsonld"),
+                "priority": int(source.get("priority", 0)), "trust": source.get("trust", "unknown"),
+                "reachable": False, "candidates": 0, "accepted_in_radius": 0,
+                "accepted_in_target_radius": 0, "preview_outside_current_radius": 0,
+                "failures": 0, "status": "disabled", "reason": "disabled_by_configuration",
+                "consecutive_empty_collections": 0,
+                "last_nonzero_candidates": int(previous_source_report.get("last_nonzero_candidates") or 0),
+                "empty_warning_threshold": int(source.get("empty_warning_threshold", 3)),
+            })
+            continue
         if time.monotonic() >= deadline:
             failures.append("Durée maximale atteinte avant la fin des sources")
             break
@@ -1201,10 +1231,14 @@ def run(
                 candidates = [event for node in nodes if (event := event_from_json(node, source["name"], node.get("url", "")))]
             source_reachable = True
             source_candidate_count = len(candidates)
+            observation = assess_observation(
+                source, source_candidate_count, previous_source_report,
+            )
             minimum_candidates = int(source.get("min_candidates", 0))
-            if source_candidate_count < minimum_candidates:
+            if source_candidate_count > 0 and source_candidate_count < minimum_candidates:
                 source_failure_count += 1
-                source_status = "degraded"
+                source_status = "error"
+                source_reason = "below_minimum_candidates"
                 failures.append(
                     f"{source['name']}: seulement {source_candidate_count} candidat(s), "
                     f"minimum attendu {minimum_candidates}"
@@ -1219,19 +1253,24 @@ def run(
             )
             collected.extend(accepted)
         except MissingCredentials as error:
-            source_status = "credentials_missing"
-            # Connecteur optionnel encore non configuré : visible dans le rapport,
-            # mais il ne dégrade pas les sources déjà opérationnelles.
+            source_status = "warning"
+            source_reason = "credentials_missing"
         except InvalidCredentials:
-            source_status = "credentials_invalid"
+            source_status = "error"
+            source_reason = "credentials_invalid"
         except Exception as error:  # une source en panne ne bloque pas les autres
             if is_transient_network_error(error):
-                source_status = "transient_error"
+                source_status = "warning"
+                source_reason = "transient_error"
                 warnings.append(f"{source['name']}: {error}")
             else:
                 source_failure_count += 1
-                source_status = "degraded"
+                source_status = "error"
+                source_reason = "collection_error"
                 failures.append(f"{source['name']}: {error}")
+        if source_status == "ok" and observation["status"] == "warning":
+            source_status = "warning"
+            source_reason = observation["reason"]
         source_reports.append({
             "name": source["name"],
             "type": source.get("type", "jsonld"),
@@ -1243,7 +1282,11 @@ def run(
             "accepted_in_target_radius": source_target_count,
             "preview_outside_current_radius": max(0, source_target_count - source_accepted_count),
             "failures": source_failure_count,
-            "status": source_status if source_failure_count == 0 else "degraded",
+            "status": "error" if source_failure_count else source_status,
+            "reason": source_reason,
+            "consecutive_empty_collections": observation["consecutive_empty_collections"],
+            "last_nonzero_candidates": observation["last_nonzero_candidates"],
+            "empty_warning_threshold": observation["empty_warning_threshold"],
         })
     for curated in config.get("curated_events", []):
         event = event_from_curated(curated)
@@ -1291,6 +1334,7 @@ def main() -> int:
     parser.add_argument("--max-pages", type=int, default=None, help="plafond de pages de détail par source")
     parser.add_argument("--max-runtime-seconds", type=int, default=180)
     parser.add_argument("--previous-feed", type=Path, default=None)
+    parser.add_argument("--previous-health", type=Path, default=None)
     arguments = parser.parse_args()
     return run(
         arguments.config,
@@ -1299,6 +1343,7 @@ def main() -> int:
         arguments.max_pages,
         arguments.max_runtime_seconds,
         arguments.previous_feed,
+        arguments.previous_health,
     )
 
 

@@ -7,12 +7,12 @@ class ManageHealthTests(unittest.TestCase):
     def test_ignores_healthy_and_missing_credentials_sources(self):
         payload = {"source_reports": [
             {"name": "Officielle", "status": "ok"},
-            {"name": "Optionnelle", "status": "credentials_missing"},
+            {"name": "Optionnelle", "status": "disabled"},
         ]}
         self.assertEqual([], degraded_sources(payload))
 
     def test_reports_configured_but_rejected_credentials(self):
-        source = {"name": "OpenAgenda", "status": "credentials_invalid"}
+        source = {"name": "OpenAgenda", "status": "error", "reason": "credentials_invalid"}
         self.assertEqual([source], degraded_sources({"source_reports": [source]}))
         body = issue_body({"exported": 20}, [source], "invalid-key")
         self.assertIn("identifiants refusés", body)

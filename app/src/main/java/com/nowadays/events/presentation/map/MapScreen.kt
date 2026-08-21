@@ -58,6 +58,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.nowadays.events.R
 import com.nowadays.events.domain.model.TimeFilter
@@ -303,7 +304,7 @@ private fun recenterOnLastKnownLocation(context: Context, controller: EventMapCo
 }
 
 @Composable
-private fun FilterBar(
+internal fun FilterBar(
     selected: TimeFilter,
     customStartDate: LocalDate?,
     customEndDate: LocalDate?,
@@ -325,14 +326,16 @@ private fun FilterBar(
         tonalElevation = 3.dp,
         shadowElevation = 4.dp,
     ) {
-        LazyRow(Modifier.fillMaxWidth().wrapContentSize().padding(8.dp)) {
+        LazyRow(
+            Modifier.fillMaxWidth().wrapContentSize().padding(8.dp).testTag("period-filter-bar"),
+        ) {
             items(labels) { (filter, label) ->
                 val isSelected = selected == filter
                 AssistChip(
                     onClick = { onSelected(filter) },
                     label = { Text(if (isSelected) "✓ $label" else label) },
                     colors = periodChipColors(isSelected),
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = 4.dp).testTag("period-${filter.name.lowercase()}"),
                 )
             }
             item {

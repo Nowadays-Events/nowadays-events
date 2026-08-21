@@ -213,15 +213,24 @@ class EventMapController(
             }
 
             val forcedFeatures = expandedClusterEventIds.mapNotNull(regularFeatures::get).map(::markAsEvent)
-            val groups = proximityGroups(mapLibreMap, pendingEvents.filterNot { it.id in expandedClusterEventIds })
+            val clusterableEvents = pendingEvents.filterNot { it.id in expandedClusterEventIds }
+            val groups = ProximityClusterer.group(
+                clusterableEvents,
+                clusterableEvents.associate { event ->
+                    val point = mapLibreMap.projection.toScreenLocation(LatLng(event.latitude, event.longitude))
+                    event.id to ScreenPoint(point.x, point.y)
+                },
+                CLUSTER_DISTANCE_PIXELS,
+            )
             val members = mutableMapOf<String, List<Event>>()
             val clusterPoints = mutableMapOf<String, Point>()
             val clusterIcons = mutableSetOf<Pair<Int, Boolean>>()
-            val features = groups.mapIndexedNotNull { index, events ->
+            val features = groups.mapNotNull { group ->
+                val events = group.events
                 if (events.size == 1) {
                     regularFeatures[events.single().id]?.let(::markAsEvent)
                 } else {
-                    val key = "cluster-$index"
+                    val key = group.id
                     members[key] = events
                     // Anchor the bubble on a real event. When it separates during zoom,
                     // at least that event remains exactly under the former bubble.
@@ -250,33 +259,6 @@ class EventMapController(
             }.toMap()
             source.setGeoJson(FeatureCollection.fromFeatures(visibleFeatures))
         }
-    }
-
-    private fun proximityGroups(mapLibreMap: MapLibreMap, events: List<Event>): List<List<Event>> {
-        val remaining = events.toMutableSet()
-        val positions = events.associateWith {
-            mapLibreMap.projection.toScreenLocation(LatLng(it.latitude, it.longitude))
-        }
-        val groups = mutableListOf<List<Event>>()
-        while (remaining.isNotEmpty()) {
-            val group = mutableListOf<Event>()
-            val queue = ArrayDeque<Event>()
-            queue += remaining.first()
-            while (queue.isNotEmpty()) {
-                val current = queue.removeFirst()
-                if (!remaining.remove(current)) continue
-                group += current
-                val point = positions.getValue(current)
-                remaining.filter { candidate ->
-                    val other = positions.getValue(candidate)
-                    val dx = point.x - other.x
-                    val dy = point.y - other.y
-                    dx * dx + dy * dy <= CLUSTER_DISTANCE_PIXELS * CLUSTER_DISTANCE_PIXELS
-                }.forEach(queue::addLast)
-            }
-            groups += group
-        }
-        return groups
     }
 
     private fun markAsEvent(feature: Feature) = feature.apply {
@@ -520,7 +502,8 @@ class EventMapController(
             val clusterKey = nearestPointId(mapLibreMap, coordinate, renderedClusterPoints, CLUSTER_HIT_RADIUS_PIXELS)
             if (clusterKey != null) {
                 val members = clusterMembers[clusterKey].orEmpty()
-                if (members.isNotEmpty()) {
+                val action = MapInteractionPolicy.resolve(null, members.map(Event::id).toSet())
+                if (action is MapTapAction.ExpandCluster) {
                     expandedClusterEventIds = members.map(Event::id).toSet()
                     awaitingClusterFrame = true
                     onClusterExpanded(expandedClusterEventIds)
@@ -530,7 +513,9 @@ class EventMapController(
                 return@addOnMapClickListener true
             }
             val eventId = nearestEventId(mapLibreMap, coordinate)
-            if (eventId != null) onEventSelected(eventId) else {
+            when (val action = MapInteractionPolicy.resolve(eventId, null)) {
+                is MapTapAction.SelectEvent -> onEventSelected(action.eventId)
+                MapTapAction.Clear -> {
                 if (expandedClusterEventIds.isNotEmpty()) {
                     expandedClusterEventIds = emptySet()
                     clusterExpansionZoom = null
@@ -538,6 +523,8 @@ class EventMapController(
                     refreshSource()
                 }
                 onBackgroundClick()
+                }
+                is MapTapAction.ExpandCluster -> Unit
             }
             eventId != null
         }

@@ -18,6 +18,9 @@ Le Gradle Wrapper 8.13 est inclus. La dernière certification produit 6 tests r�
 
 Le détail des décisions, du modèle de données, des filtres, du clustering et des coûts se trouve dans [ANALYSE_MVP.md](ANALYSE_MVP.md).
 Le guide d’intégration d’une nouvelle source se trouve dans [docs/ADDING_EVENT_SOURCE.md](docs/ADDING_EVENT_SOURCE.md).
+La supervision et la réactivation des connecteurs sont décrites dans
+[docs/SOURCE_MONITORING.md](docs/SOURCE_MONITORING.md). Le protocole reproductible de bêta privée
+se trouve dans [docs/PRIVATE_BETA_PROTOCOL.md](docs/PRIVATE_BETA_PROTOCOL.md).
 
 ### Validation administrateur
 

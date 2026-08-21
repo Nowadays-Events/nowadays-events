@@ -13,6 +13,7 @@
     {
       "name": "OpenAgenda — événements géolocalisés",
       "type": "openagenda",
+      "enabled": false,
       "priority": 90,
       "trust": "platform",
       "url": "https://api.openagenda.com/v2/events",
@@ -99,7 +100,9 @@
       "priority": 100,
       "trust": "official",
       "url": "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas",
-      "max_detail_pages": 30
+      "max_detail_pages": 30,
+      "expect_events": true,
+      "empty_warning_threshold": 3
     }
   ],
   "candidate_events": [],

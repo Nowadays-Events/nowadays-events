@@ -2,10 +2,21 @@ import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-from provider_sources import InvalidCredentials, map_eventbrite, map_helloasso, map_openagenda, request_json
+from provider_sources import (
+    InvalidCredentials, MissingCredentials, map_eventbrite, map_helloasso, map_openagenda,
+    openagenda_events, request_json,
+)
 
 
 class ProviderSourceTests(unittest.TestCase):
+    def test_openagenda_without_key_is_explicitly_missing_credentials(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(MissingCredentials):
+                openagenda_events(
+                    {"api_key_env": "OPENAGENDA_API_KEY"},
+                    {"latitude": 43.89, "longitude": -0.50},
+                    1,
+                )
     def test_http_403_is_reported_as_invalid_credentials(self):
         error = HTTPError("https://api.example", 403, "Forbidden", {}, None)
         with patch("urllib.request.urlopen", side_effect=error):

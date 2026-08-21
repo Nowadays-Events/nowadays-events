@@ -1,6 +1,7 @@
 package com.nowadays.events.presentation.map
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.nowadays.events.domain.model.TimeFilter
 import com.nowadays.events.domain.model.AttendanceResponse
@@ -10,6 +11,7 @@ import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.repository.EventRepository
 import com.nowadays.events.domain.usecase.EventTimeFilters
 import com.nowadays.events.domain.usecase.EventFamilyGrouper
+import com.nowadays.events.map.MapSelectionPolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +29,13 @@ import java.time.LocalDate
 class MapViewModel @Inject constructor(
     private val repository: EventRepository,
     private val filters: EventTimeFilters,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val selectedFilter = MutableStateFlow(TimeFilter.TODAY)
+    private val selectedFilter = MutableStateFlow(
+        savedStateHandle.get<String>("selected_filter")
+            ?.let { runCatching { TimeFilter.valueOf(it) }.getOrNull() }
+            ?: TimeFilter.TODAY,
+    )
     private val selectedEventId = MutableStateFlow<String?>(null)
     private val expandedMainEventId = MutableStateFlow<String?>(null)
     private val customDateRange = MutableStateFlow<Pair<LocalDate, LocalDate>?>(null)
@@ -80,7 +87,9 @@ class MapViewModel @Inject constructor(
         val families = EventFamilyGrouper.group(filtered)
         val expandedFamily = families.firstOrNull { it.main.id == selection.expandedMainId }
         val visible = expandedFamily?.events ?: families.map { it.main }
-        val selected = events.firstOrNull { it.id == selection.eventId }
+        val visibleSelectionIds = filtered.map(Event::id).toSet()
+        val validSelectedId = MapSelectionPolicy.retainIfVisible(selection.eventId, visibleSelectionIds)
+        val selected = filtered.firstOrNull { it.id == validSelectedId }
         val selectedFamily = selected?.let { event -> families.firstOrNull { family -> family.events.any { it.id == event.id } } }
         val related = selectedFamily?.events.orEmpty()
         MapUiState(
@@ -100,7 +109,9 @@ class MapViewModel @Inject constructor(
             expandedMainEvent = expandedFamily?.main,
             childEventIds = expandedFamily?.children?.map(Event::id)?.toSet().orEmpty(),
             childCounts = families.associate { it.main.id to it.children.size },
-            expandedClusterEventIds = filterSelection.expandedClusterIds.intersect(visible.map(Event::id).toSet()),
+            expandedClusterEventIds = MapSelectionPolicy.expandedClusterIds(
+                filterSelection.expandedClusterIds, visible.map(Event::id).toSet(),
+            ),
             selectedFamilyEventIds = selectedFamily?.events?.map(Event::id).orEmpty(),
             selectedSourceUrls = selectedFamily?.sourceUrls.orEmpty(),
             attendanceResponse = selection.attendance,
@@ -110,6 +121,7 @@ class MapViewModel @Inject constructor(
 
     fun selectFilter(filter: TimeFilter) {
         selectedFilter.value = filter
+        savedStateHandle["selected_filter"] = filter.name
         expandedMainEventId.value = null
         selectedEventId.value = null
         expandedClusterEventIds.value = emptySet()
@@ -118,6 +130,7 @@ class MapViewModel @Inject constructor(
     fun selectCustomRange(start: LocalDate, endInclusive: LocalDate) {
         customDateRange.value = start to endInclusive
         selectedFilter.value = TimeFilter.CUSTOM
+        savedStateHandle["selected_filter"] = TimeFilter.CUSTOM.name
         expandedMainEventId.value = null
         selectedEventId.value = null
         expandedClusterEventIds.value = emptySet()

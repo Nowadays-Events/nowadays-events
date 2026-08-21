@@ -11,12 +11,20 @@ from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail
 
 
 class NowadaysAgentTests(unittest.TestCase):
+    def test_openagenda_is_explicitly_disabled_in_production_config(self):
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        source = next(item for item in config["sources"] if item["type"] == "openagenda")
+        self.assertIs(False, source["enabled"])
+
     def test_collection_status_distinguishes_invalid_from_missing_credentials(self):
-        missing = [{"status": "credentials_missing"}]
-        invalid = [{"status": "credentials_invalid"}]
-        self.assertEqual("ok", collection_status([], [], missing))
-        self.assertEqual("attention", collection_status([], [], invalid))
-        self.assertEqual("partial", collection_status([], ["timeout"], invalid))
+        disabled = [{"status": "disabled"}]
+        missing = [{"status": "warning", "reason": "credentials_missing"}]
+        invalid = [{"status": "error", "reason": "credentials_invalid"}]
+        self.assertEqual("ok", collection_status([], [], disabled))
+        self.assertEqual("attention", collection_status([], [], missing))
+        self.assertEqual("degraded", collection_status([], [], invalid))
+        self.assertEqual("partial", collection_status([], ["timeout"], disabled))
+        self.assertEqual("degraded", collection_status([], ["timeout"], invalid))
         self.assertEqual("degraded", collection_status(["parsing failed"], [], invalid))
 
     def test_coverage_readiness_requires_healthy_sources_for_all_target_areas(self):

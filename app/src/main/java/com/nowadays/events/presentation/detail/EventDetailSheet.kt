@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.core.net.toUri
 import com.nowadays.events.domain.model.*
 import java.time.ZoneId
@@ -47,7 +48,11 @@ fun EventDetailSheet(
         EventStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
         EventStatus.UNVERIFIED -> MaterialTheme.colorScheme.surfaceVariant
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.testTag("event-detail-sheet"),
+    ) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = 590.dp).verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp).padding(bottom = 22.dp),
@@ -56,7 +61,7 @@ fun EventDetailSheet(
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = headerColor,
-                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                modifier = Modifier.fillMaxWidth().clickable { expanded = true }.testTag("event-detail-header"),
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(event.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
