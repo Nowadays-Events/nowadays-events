@@ -24,6 +24,7 @@
     {
       "name": "HelloAsso — annuaire événements",
       "type": "helloasso",
+      "enabled": false,
       "priority": 85,
       "trust": "platform",
       "client_id_env": "HELLOASSO_CLIENT_ID",
@@ -34,6 +35,7 @@
     {
       "name": "Eventbrite — organisations autorisées",
       "type": "eventbrite",
+      "enabled": false,
       "priority": 80,
       "trust": "platform",
       "token_env": "EVENTBRITE_PRIVATE_TOKEN",
@@ -96,10 +98,15 @@
     },
     {
       "name": "Ville de Saint-Sever",
-      "type": "jsonld",
+      "type": "saint_sever_html",
       "priority": 100,
       "trust": "official",
       "url": "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas",
+      "detail_path_tokens": ["/en-un-clic/a-noter-sur-vos-agendas/"],
+      "preserve_detail_query": true,
+      "latitude": 43.763267,
+      "longitude": -0.55979,
+      "min_candidates": 5,
       "max_detail_pages": 30,
       "expect_events": true,
       "empty_warning_threshold": 3

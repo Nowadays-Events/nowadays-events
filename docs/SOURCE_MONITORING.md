@@ -29,3 +29,10 @@ OpenAgenda est actuellement désactivé par `"enabled": false`. Pour le réactiv
    `source_reports` dans `health.json`.
 
 Aucune clé ne doit être inscrite dans un fichier du dépôt.
+
+## HelloAsso et Eventbrite
+
+Ces connecteurs optionnels sont également désactivés par `"enabled": false` tant que leurs
+identifiants ne sont pas configurés. Pour les réactiver, enregistrer les secrets indiqués par
+les champs `*_env` de `agent/config.json`, passer uniquement `enabled` à `true`, puis lancer
+manuellement le workflow et vérifier leur rapport dans `health.json`.

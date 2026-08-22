@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -15,6 +15,12 @@ class NowadaysAgentTests(unittest.TestCase):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
         source = next(item for item in config["sources"] if item["type"] == "openagenda")
         self.assertIs(False, source["enabled"])
+
+    def test_unconfigured_optional_providers_are_explicitly_disabled(self):
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        sources = {item["type"]: item for item in config["sources"]}
+        for source_type in ("openagenda", "helloasso", "eventbrite"):
+            self.assertIs(False, sources[source_type]["enabled"])
 
     def test_collection_status_distinguishes_invalid_from_missing_credentials(self):
         disabled = [{"status": "disabled"}]
@@ -302,6 +308,44 @@ class NowadaysAgentTests(unittest.TestCase):
             ["https://example.org/offres/concert-mimizan-fr-123"],
             detail_links(body, "https://example.org/agenda/", 10, ["/offres/"]),
         )
+
+    def test_detail_links_can_preserve_occurrence_query(self):
+        body = '''
+        <a href="/en-un-clic/a-noter-sur-vos-agendas/yoga?date=2026-09-05">Samedi</a>
+        <a href="/en-un-clic/a-noter-sur-vos-agendas/yoga?date=2026-09-12#content">Suivant</a>
+        '''
+        self.assertEqual(
+            [
+                "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas/yoga?date=2026-09-05",
+                "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas/yoga?date=2026-09-12",
+            ],
+            detail_links(
+                body,
+                "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas",
+                10,
+                ["/en-un-clic/a-noter-sur-vos-agendas/"],
+                preserve_query=True,
+            ),
+        )
+
+    def test_extracts_saint_sever_html_event(self):
+        body = '''
+        <meta name="description" content="Rencontrez les associations locales.">
+        <h1 id="article-title">Forum des associations</h1>
+        <div class="uk-container date-article">samedi 05 septembre 2026 de 09:00 à 12:30</div>
+        <p><strong>Lieu </strong>: Salle Laloubère</p>
+        '''
+        event = extract_saint_sever_event(
+            body,
+            "Ville de Saint-Sever",
+            "https://www.saint-sever.fr/en-un-clic/a-noter-sur-vos-agendas/forum?date=2026-09-05",
+        )
+        self.assertIsNotNone(event)
+        self.assertEqual("Forum des associations", event.title)
+        self.assertEqual("Salle Laloubère", event.venue)
+        self.assertEqual("2026-09-05T07:00:00+00:00", event.start_at)
+        self.assertEqual("2026-09-05T10:30:00+00:00", event.end_at)
+        self.assertEqual((43.763267, -0.55979), (event.latitude, event.longitude))
 
     def test_mimizan_official_source_is_in_expanded_coastal_radius(self):
         config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))

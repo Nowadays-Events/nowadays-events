@@ -727,6 +727,64 @@ def extract_biscarrosse_event(
     return event_from_json(node, source_name, page_url)
 
 
+def extract_saint_sever_event(
+    body: str,
+    source_name: str,
+    page_url: str,
+    latitude: float = 43.763267,
+    longitude: float = -0.55979,
+) -> Event | None:
+    """Extrait une fiche de l'agenda HTML officiel de Saint-Sever."""
+    title_match = re.search(
+        r'<h1\b[^>]*id=["\']article-title["\'][^>]*>(.*?)</h1>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    date_match = re.search(
+        r'<div\b[^>]*class=["\'][^"\']*date-article[^"\']*["\'][^>]*>(.*?)</div>',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    if not title_match or not date_match:
+        return None
+    date_text = normalize(html_fragment_text(date_match.group(1)))
+    match = re.search(
+        r'\b(\d{1,2})\s+([a-z]+)\s+(20\d{2})(?:\s+de\s+(\d{1,2})\s+(\d{2})\s+a\s+(\d{1,2})\s+(\d{2}))?',
+        date_text,
+    )
+    if not match:
+        return None
+    month = french_month(match.group(2))
+    if not month:
+        return None
+    start = datetime(
+        int(match.group(3)), month, int(match.group(1)),
+        int(match.group(4) or 0), int(match.group(5) or 0), tzinfo=ZoneInfo("Europe/Paris"),
+    )
+    end = start.replace(
+        hour=int(match.group(6) or match.group(4) or 23),
+        minute=int(match.group(7) or match.group(5) or 59),
+    )
+    venue_match = re.search(
+        r'<strong\b[^>]*>\s*Lieu\s*</strong>\s*:\s*([^<]+)',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    meta_match = re.search(
+        r'<meta\b[^>]*name=["\']description["\'][^>]*content=["\'](.*?)["\']',
+        body, re.IGNORECASE | re.DOTALL,
+    )
+    venue = html_fragment_text(venue_match.group(1)) if venue_match else "Saint-Sever"
+    description = html_fragment_text(meta_match.group(1)) if meta_match else ""
+    node = {
+        "@type": "Event", "name": html_fragment_text(title_match.group(1)),
+        "description": description, "startDate": start.isoformat(), "endDate": end.isoformat(),
+        "url": page_url,
+        "location": {
+            "@type": "Place", "name": venue, "address": "40500 Saint-Sever",
+            "geo": {"latitude": latitude, "longitude": longitude},
+        },
+    }
+    return event_from_json(node, source_name, page_url)
+
+
 def extract_detail_events(
     source_type: str, body: str, source_name: str, detail_url: str,
 ) -> list[Event]:
@@ -735,6 +793,9 @@ def extract_detail_events(
         return [event] if event else []
     if source_type == "biscarrosse_html":
         event = extract_biscarrosse_event(body, source_name, detail_url)
+        return [event] if event else []
+    if source_type == "saint_sever_html":
+        event = extract_saint_sever_event(body, source_name, detail_url)
         return [event] if event else []
     return extract_events(body, source_name, detail_url)
 
@@ -752,13 +813,18 @@ def fetch(url: str, timeout: int = 20) -> str:
 
 def detail_links(
     body: str, base_url: str, limit: int, path_tokens: Iterable[str] | None = None,
+    preserve_query: bool = False,
 ) -> list[str]:
     parser = LinkParser()
     parser.feed(body)
     base = urlsplit(base_url)
     accepted: list[str] = []
     for raw in parser.links:
-        url = canonical_url(urljoin(base_url, html.unescape(raw)))
+        joined = urljoin(base_url, html.unescape(raw))
+        url = (
+            urlunsplit((*urlsplit(joined)[:3], urlsplit(joined).query, ""))
+            if preserve_query else canonical_url(joined)
+        )
         parts = urlsplit(url)
         if parts.netloc != base.netloc or url == canonical_url(base_url):
             continue
@@ -1161,7 +1227,10 @@ def run(
         try:
             source_type = source.get("type", "jsonld")
             timeout = min(20, max(1, int(deadline - time.monotonic())))
-            if source_type in ("jsonld", "armagnac_html", "biscarrosse_html", "dax_embedded"):
+            if source_type in (
+                "jsonld", "armagnac_html", "biscarrosse_html", "dax_embedded",
+                "saint_sever_html",
+            ):
                 body = fetch(source["url"], timeout=timeout)
                 candidates = (
                     extract_dax_events(body, source["name"], source["url"])
@@ -1187,6 +1256,7 @@ def run(
                         source["url"],
                         page_limit,
                         source.get("detail_path_tokens"),
+                        bool(source.get("preserve_detail_query", False)),
                     ):
                         if detail_url not in source_detail_links:
                             source_detail_links.append(detail_url)
@@ -1211,6 +1281,15 @@ def run(
                                 geocode=lambda query: geocode_french_address(
                                     query, "Biscarrosse", timeout=min(8, max(1, remaining)),
                                 ),
+                            )
+                            return ([event] if event else []), None
+                        if source_type == "saint_sever_html":
+                            event = extract_saint_sever_event(
+                                detail_body,
+                                source["name"],
+                                detail_url,
+                                latitude=float(source.get("latitude", 43.763267)),
+                                longitude=float(source.get("longitude", -0.55979)),
                             )
                             return ([event] if event else []), None
                         return extract_detail_events(source_type, detail_body, source["name"], detail_url), None
