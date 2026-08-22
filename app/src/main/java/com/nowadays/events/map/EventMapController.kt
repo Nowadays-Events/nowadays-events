@@ -77,6 +77,13 @@ class EventMapController(
 
     fun attach(mapLibreMap: MapLibreMap, displayDensity: Float) {
         map = mapLibreMap
+        val viewportPadding = mapViewportPadding(displayDensity)
+        mapLibreMap.setPadding(
+            viewportPadding.left,
+            viewportPadding.top,
+            viewportPadding.right,
+            viewportPadding.bottom,
+        )
         mapLibreMap.uiSettings.compassGravity = Gravity.TOP or Gravity.END
         mapLibreMap.uiSettings.setCompassMargins(
             0,
