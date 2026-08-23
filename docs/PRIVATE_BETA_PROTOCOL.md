@@ -55,3 +55,20 @@ Capture ou vidéo :
 - tests Python, JVM, compilation Android et `git diff --check` verts ;
 - tests instrumentés exécutés sur au moins deux versions Android ;
 - anomalies de données critiques documentées et attribuées à une source ou au déduplicateur.
+
+## Exécutions consignées
+
+### 23 août 2026 — Samsung SM-G991B, Android 15, Xymis 0.2.6
+
+- lancement à froid : réussi, écran principal et horodatage du flux visibles ;
+- cache hors ligne : réussi après coupure simultanée du Wi-Fi et des données mobiles, arrêt
+  complet et relance ; connexions ensuite restaurées et validées ;
+- recréation en paysage : filtre `Demain` conservé ; rotation système restaurée après l'essai ;
+- reprise après passage bref en arrière-plan : filtre `Demain` conservé ;
+- stabilité : aucune exception fatale ni ANR relevée dans Logcat pendant la session ;
+- mémoire ponctuelle après la session : `TOTAL PSS` 182 856 Kio. Cette valeur est un repère,
+  pas une mesure de performance ni un benchmark.
+
+Restent à exécuter : retour après cinq minutes réelles en arrière-plan, parcours manuel des
+groupes parent/enfant et des zones côtières, puis la même base sur au moins un second appareil
+avec une autre version Android.
