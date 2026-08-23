@@ -17,7 +17,6 @@ import kotlin.math.roundToInt
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.all
@@ -173,15 +172,6 @@ class EventMapController(
 
     fun recenter(target: LatLng = DEFAULT_CENTER, zoom: Double = DEFAULT_ZOOM) {
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(target, zoom), 500)
-    }
-
-    fun frame(events: List<Event>) {
-        if (events.isEmpty()) return
-        if (events.size == 1 || events.map { it.latitude to it.longitude }.distinct().size == 1) {
-            return recenter(LatLng(events.first().latitude, events.first().longitude), 15.5)
-        }
-        val bounds = LatLngBounds.Builder().includes(events.map { LatLng(it.latitude, it.longitude) }).build()
-        map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120), 550)
     }
 
     private fun refreshSource() {
@@ -511,11 +501,20 @@ class EventMapController(
                 val members = clusterMembers[clusterKey].orEmpty()
                 val action = MapInteractionPolicy.resolve(null, members.map(Event::id).toSet())
                 if (action is MapTapAction.ExpandCluster) {
-                    expandedClusterEventIds = members.map(Event::id).toSet()
-                    awaitingClusterFrame = true
-                    onClusterExpanded(expandedClusterEventIds)
-                    refreshSource()
-                    frame(members)
+                    expandedClusterEventIds = emptySet()
+                    clusterExpansionZoom = null
+                    awaitingClusterFrame = false
+                    onClusterExpanded(emptySet())
+                    val anchor = renderedClusterPoints[clusterKey]
+                    if (anchor != null) {
+                        mapLibreMap.animateCamera(
+                            CameraUpdateFactory.newLatLngZoom(
+                                LatLng(anchor.latitude(), anchor.longitude()),
+                                ClusterTapCameraPolicy.targetZoom(mapLibreMap.cameraPosition.zoom),
+                            ),
+                            CLUSTER_ZOOM_DURATION_MS,
+                        )
+                    }
                 }
                 return@addOnMapClickListener true
             }
@@ -573,6 +572,7 @@ class EventMapController(
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
         private const val CLUSTER_DISTANCE_PIXELS = 104f
         private const val INDIVIDUAL_MARKERS_ZOOM = 15.0
+        private const val CLUSTER_ZOOM_DURATION_MS = 600
         private const val EVENT_HIT_RADIUS_PIXELS = 54f
         private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5

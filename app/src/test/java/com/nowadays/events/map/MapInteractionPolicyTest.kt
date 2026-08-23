@@ -10,6 +10,12 @@ class MapInteractionPolicyTest {
         assertFalse(MapInteractionPolicy.requestsZoom(action))
     }
 
+    @Test fun `main event selection never requests zoom`() {
+        val action = MapInteractionPolicy.resolve("main-event", null)
+        assertEquals(MapTapAction.SelectEvent("main-event"), action)
+        assertFalse(MapInteractionPolicy.requestsZoom(action))
+    }
+
     @Test fun `cluster selection requests zoom`() {
         val action = MapInteractionPolicy.resolve(null, setOf("one", "two"))
         assertTrue(action is MapTapAction.ExpandCluster)
