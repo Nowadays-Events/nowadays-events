@@ -199,7 +199,10 @@ class EventMapController(
             // While exploring a family, every child must remain individually visible.
             // Otherwise clustering is driven only by the actual on-screen distance:
             // a fixed zoom cut-off could remove a cluster before its markers were visible.
-            if (pendingExpandedMainEvent != null || mapLibreMap.cameraPosition.zoom >= INDIVIDUAL_MARKERS_ZOOM) {
+            if (
+                pendingExpandedMainEvent != null ||
+                mapLibreMap.cameraPosition.zoom >= ClusterTapCameraPolicy.CLICKABLE_EVENTS_ZOOM
+            ) {
                 clusterMembers = emptyMap()
                 renderedClusterPoints = emptyMap()
                 renderedEventPoints = regularFeatures.mapNotNull { (id, feature) ->
@@ -512,7 +515,7 @@ class EventMapController(
                                 LatLng(anchor.latitude(), anchor.longitude()),
                                 ClusterTapCameraPolicy.targetZoom(mapLibreMap.cameraPosition.zoom),
                             ),
-                            CLUSTER_ZOOM_DURATION_MS,
+                            ClusterTapCameraPolicy.durationMs(mapLibreMap.cameraPosition.zoom),
                         )
                     }
                 }
@@ -571,8 +574,6 @@ class EventMapController(
         private const val CLUSTER_KEY_PROPERTY = "cluster_key"
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
         private const val CLUSTER_DISTANCE_PIXELS = 104f
-        private const val INDIVIDUAL_MARKERS_ZOOM = 15.0
-        private const val CLUSTER_ZOOM_DURATION_MS = 600
         private const val EVENT_HIT_RADIUS_PIXELS = 54f
         private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5
