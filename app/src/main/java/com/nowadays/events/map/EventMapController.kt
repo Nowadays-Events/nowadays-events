@@ -17,6 +17,7 @@ import kotlin.math.roundToInt
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.all
@@ -73,9 +74,11 @@ class EventMapController(
     private var renderedClusterPoints: Map<String, Point> = emptyMap()
     private var clusterExpansionZoom: Double? = null
     private var awaitingClusterFrame = false
+    private var displayDensity = 1f
 
     fun attach(mapLibreMap: MapLibreMap, displayDensity: Float) {
         map = mapLibreMap
+        this.displayDensity = displayDensity
         val viewportPadding = mapViewportPadding(displayDensity)
         mapLibreMap.setPadding(
             viewportPadding.left,
@@ -510,12 +513,28 @@ class EventMapController(
                     onClusterExpanded(emptySet())
                     val anchor = renderedClusterPoints[clusterKey]
                     if (anchor != null) {
+                        val coordinates = members.map { LatLng(it.latitude, it.longitude) }
+                        val fallbackCamera = CameraPosition.Builder()
+                            .target(LatLng(anchor.latitude(), anchor.longitude()))
+                            .zoom(ClusterTapCameraPolicy.CLICKABLE_EVENTS_ZOOM)
+                            .build()
+                        val fittedCamera = if (coordinates.distinct().size > 1) {
+                            val bounds = LatLngBounds.Builder().includes(coordinates).build()
+                            val padding = (CLUSTER_FRAME_PADDING_DP * displayDensity).roundToInt()
+                            mapLibreMap.getCameraForLatLngBounds(
+                                bounds,
+                                intArrayOf(padding, padding, padding, padding),
+                            ) ?: fallbackCamera
+                        } else {
+                            fallbackCamera
+                        }
+                        val currentZoom = mapLibreMap.cameraPosition.zoom
+                        val targetZoom = ClusterTapCameraPolicy.targetZoom(currentZoom, fittedCamera.zoom)
                         mapLibreMap.animateCamera(
-                            CameraUpdateFactory.newLatLngZoom(
-                                LatLng(anchor.latitude(), anchor.longitude()),
-                                ClusterTapCameraPolicy.targetZoom(mapLibreMap.cameraPosition.zoom),
+                            CameraUpdateFactory.newCameraPosition(
+                                CameraPosition.Builder(fittedCamera).zoom(targetZoom).build(),
                             ),
-                            ClusterTapCameraPolicy.durationMs(mapLibreMap.cameraPosition.zoom),
+                            ClusterTapCameraPolicy.durationMs(currentZoom, targetZoom),
                         )
                     }
                 }
@@ -574,6 +593,7 @@ class EventMapController(
         private const val CLUSTER_KEY_PROPERTY = "cluster_key"
         private const val CLUSTER_ICON_PROPERTY = "cluster_icon"
         private const val CLUSTER_DISTANCE_PIXELS = 104f
+        private const val CLUSTER_FRAME_PADDING_DP = 72
         private const val EVENT_HIT_RADIUS_PIXELS = 54f
         private const val CLUSTER_HIT_RADIUS_PIXELS = 42f
         private const val DEFAULT_ZOOM = 11.5
