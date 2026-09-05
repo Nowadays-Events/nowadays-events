@@ -15,6 +15,7 @@ data class MapUiState(
     val selectedCategory: com.nowadays.events.domain.model.EventCategory? = null,
     val priceFilter: EventPriceFilter = EventPriceFilter.ALL,
     val events: List<Event> = emptyList(),
+    val nearbyEvents: List<Event> = emptyList(),
     val selectedEvent: Event? = null,
     val relatedEvents: List<Event> = emptyList(),
     val selectedIsMainEvent: Boolean = false,

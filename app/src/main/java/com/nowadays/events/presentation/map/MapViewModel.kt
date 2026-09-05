@@ -101,6 +101,7 @@ class MapViewModel @Inject constructor(
             selectedCategory = content.category,
             priceFilter = content.price,
             events = visible,
+            nearbyEvents = filters.apply(events, TimeFilter.ALL_FUTURE),
             selectedEvent = selected,
             relatedEvents = related,
             selectedIsMainEvent = selected != null && selectedFamily?.main?.id == selected.id && selectedFamily.children.isNotEmpty(),
@@ -151,6 +152,13 @@ class MapViewModel @Inject constructor(
     }
 
     fun selectEvent(id: String) {
+        selectedEventId.value = id
+    }
+    fun openNearbyEvent(id: String) {
+        selectedFilter.value = TimeFilter.ALL_FUTURE
+        savedStateHandle["selected_filter"] = TimeFilter.ALL_FUTURE.name
+        expandedMainEventId.value = null
+        expandedClusterEventIds.value = emptySet()
         selectedEventId.value = id
     }
     fun expandSelectedSource() { uiState.value.selectedEvent?.id?.let { expandedMainEventId.value = it } }

@@ -40,9 +40,7 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
 
     fun apply(events: List<Event>, filter: TimeFilter, zoneId: ZoneId = ZoneId.systemDefault()): List<Event> {
         val window = window(filter, zoneId)
-        return events.filter { event ->
-            event.endsAt >= window.start && (window.endExclusive == null || event.startsAt < window.endExclusive)
-        }.sortedBy(Event::startsAt)
+        return events.filter { it.intersects(window) }.sortedBy(::relevantStart)
     }
 
     fun apply(
@@ -53,6 +51,18 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
     ): List<Event> {
         val start = startDate.atStartOfDay(zoneId).toInstant()
         val endExclusive = endDateInclusive.plusDays(1).atStartOfDay(zoneId).toInstant()
-        return events.filter { it.endsAt >= start && it.startsAt < endExclusive }.sortedBy(Event::startsAt)
+        val window = TimeWindow(start, endExclusive)
+        return events.filter { it.intersects(window) }.sortedBy(::relevantStart)
+    }
+
+    private fun relevantStart(event: Event): Instant =
+        if (event.occurrenceCount > 1) event.nextOccurrenceAt ?: Instant.MAX else event.startsAt
+
+    private fun Event.intersects(window: TimeWindow): Boolean {
+        if (occurrenceCount > 1) {
+            val occurrence = nextOccurrenceAt ?: return false
+            return occurrence >= window.start && (window.endExclusive == null || occurrence < window.endExclusive)
+        }
+        return endsAt >= window.start && (window.endExclusive == null || startsAt < window.endExclusive)
     }
 }

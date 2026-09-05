@@ -4,7 +4,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import com.nowadays.events.domain.model.AttendanceResponse
 import com.nowadays.events.domain.model.*
 import com.nowadays.events.presentation.detail.EventDetailSheet
@@ -16,7 +15,7 @@ import org.junit.Test
 class EventDetailInstrumentedTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun deterministicEventOpensAndExpandsItsDetails() {
+    @Test fun deterministicEventImmediatelyShowsEssentialDetails() {
         val instant = Instant.parse("2026-09-01T10:00:00Z")
         val event = Event(
             "simple", "Événement simple", "Description", null, EventCategory.CULTURE,
@@ -34,7 +33,7 @@ class EventDetailInstrumentedTest {
             }
         }
         compose.onNodeWithText("Événement simple").assertIsDisplayed()
-        compose.onNodeWithTag("event-detail-header").performClick()
         compose.onNodeWithText("Mont-de-Marsan").assertIsDisplayed()
+        compose.onNodeWithText("Gratuit").assertIsDisplayed()
     }
 }

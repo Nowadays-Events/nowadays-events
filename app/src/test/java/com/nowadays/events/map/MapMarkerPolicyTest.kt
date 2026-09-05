@@ -30,14 +30,15 @@ class MapMarkerPolicyTest {
         assertTrue(MapMarkerPolicy.isLongRunning(event("2026-07-29T10:00:00Z", "2026-07-30T22:00:00Z")))
     }
 
-    @Test fun `recurring event uses today while it is active`() {
+    @Test fun `long running event is not automatically considered recurring`() {
         val recurring = event("2026-07-01T10:00:00Z", "2026-08-31T18:00:00Z")
-        assertTrue(MapMarkerPolicy.isRecurring(recurring))
-        assertEquals(today, MapMarkerPolicy.displayDate(recurring, today, zone))
+        assertFalse(MapMarkerPolicy.isRecurring(recurring))
+        assertTrue(MapMarkerPolicy.isLongRunning(recurring))
+        assertEquals(LocalDate.of(2026, 7, 1), MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 
     @Test fun `recurring event keeps start date before it begins`() {
-        val recurring = event("2026-08-01T10:00:00Z", "2026-09-30T18:00:00Z")
+        val recurring = event("2026-08-01T10:00:00Z", "2026-09-30T18:00:00Z").copy(occurrenceCount = 4)
         assertEquals(LocalDate.of(2026, 8, 1), MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 

@@ -18,13 +18,13 @@ class MapScreenInstrumentedTest {
         compose.onNodeWithText("Xymis Events").assertIsDisplayed()
         compose.onNodeWithTag("period-filter-bar").performScrollToNode(hasTestTag("period-this_weekend"))
         compose.onNodeWithTag("period-this_weekend").performClick()
-        compose.onNodeWithText("✓ Ce week-end").assertIsDisplayed()
+        compose.onNodeWithText("✓ Week-end").assertIsDisplayed()
     }
 
     @Test fun selectedFilterSurvivesActivityRecreation() {
         compose.onNodeWithTag("period-filter-bar").performScrollToNode(hasTestTag("period-this_weekend"))
         compose.onNodeWithTag("period-this_weekend").performClick()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("✓ Ce week-end").assertIsDisplayed()
+        compose.onNodeWithText("✓ Week-end").assertIsDisplayed()
     }
 }

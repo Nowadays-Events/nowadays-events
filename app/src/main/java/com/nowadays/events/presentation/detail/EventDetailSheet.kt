@@ -3,7 +3,6 @@ package com.nowadays.events.presentation.detail
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -24,6 +24,7 @@ import com.nowadays.events.domain.model.*
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,9 +39,19 @@ fun EventDetailSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val scope = rememberCoroutineScope()
     var confirmDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var reportEvent by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var expanded by androidx.compose.runtime.remember(event.id) { androidx.compose.runtime.mutableStateOf(false) }
+    var isDismissing by androidx.compose.runtime.remember(event.id) { androidx.compose.runtime.mutableStateOf(false) }
+    fun dismissAnimated() {
+        if (isDismissing) return
+        isDismissing = true
+        scope.launch {
+            sheetState.hide()
+            onDismiss()
+        }
+    }
     val date = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withZone(ZoneId.systemDefault())
     val headerColor = when (event.status) {
         EventStatus.CANCELLED -> MaterialTheme.colorScheme.errorContainer
@@ -49,7 +60,8 @@ fun EventDetailSheet(
         EventStatus.UNVERIFIED -> MaterialTheme.colorScheme.surfaceVariant
     }
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = ::dismissAnimated,
+        sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("event-detail-sheet"),
     ) {
@@ -60,17 +72,19 @@ fun EventDetailSheet(
         ) {
             Surface(
                 shape = MaterialTheme.shapes.large,
-                color = headerColor,
-                modifier = Modifier.fillMaxWidth().clickable { expanded = true }.testTag("event-detail-header"),
+                color = headerColor.copy(alpha = 0.68f),
+                modifier = Modifier.fillMaxWidth().testTag("event-detail-header"),
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(event.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    if (expanded && relatedEventCount > 0) Text("Événement principal · $relatedEventCount rendez-vous liés", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    if (expanded) event.organizer?.let { Text("Par $it", style = MaterialTheme.typography.bodyMedium) }
-                    if (expanded && event.occurrenceCount > 1) Text(
+                    Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (relatedEventCount > 0) Text("Événement principal · $relatedEventCount rendez-vous liés", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    event.organizer?.let { Text("Par $it", style = MaterialTheme.typography.bodySmall) }
+                    if (event.occurrenceCount > 1) Text(
                         "${event.occurrenceCount} occurrences programmées",
                         style = MaterialTheme.typography.labelMedium,
                     )
+                    InfoRow(Icons.Default.CalendarMonth, "Quand", eventDateLabel(event, date))
+                    InfoRow(Icons.Default.LocationOn, event.venueName, normalizedAddress(event.address))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         when (event.status) {
                             EventStatus.CANCELLED -> AssistChip(
@@ -89,7 +103,6 @@ fun EventDetailSheet(
                     }
                 }
             }
-            if (!expanded) return@Column
             when (event.status) {
                 EventStatus.CANCELLED -> Text(
                     "Cet événement a été annulé par l’organisateur. Il reste affiché pour vous en informer.",
@@ -108,8 +121,6 @@ fun EventDetailSheet(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            InfoRow(Icons.Default.CalendarMonth, "Quand", "${date.format(event.startsAt)}\n${date.format(event.endsAt)}")
-            InfoRow(Icons.Default.LocationOn, event.venueName, event.address)
             HorizontalDivider()
             Text("À propos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(event.fullDescription ?: event.shortDescription, style = MaterialTheme.typography.bodyLarge)
@@ -221,6 +232,27 @@ fun EventDetailSheet(
 }
 
 private fun EventCategory.label() = name.lowercase().replaceFirstChar(Char::uppercase)
+
+internal fun normalizedAddress(value: String): String = value.trim()
+    .replace(Regex("(?<=\\d)(?=[A-ZÀ-ÖØ-Þ])"), " ")
+    .replace(Regex("(?<=[a-zà-öø-ÿ])(?=France\\b)", RegexOption.IGNORE_CASE), ", ")
+    .replace(Regex("\\s*,\\s*"), ", ")
+    .replace(Regex("\\s{2,}"), " ")
+
+internal fun eventDateLabel(event: Event, formatter: DateTimeFormatter): String {
+    val next = event.nextOccurrenceAt
+    return if (event.occurrenceCount > 1 && next == null) {
+        "Aucune prochaine date confirmée"
+    } else if (event.occurrenceCount > 1 && next != null) {
+        val remaining = (event.occurrenceCount - 1).coerceAtLeast(0)
+        buildString {
+            append("Prochaine date : ${formatter.format(next)}")
+            if (remaining > 0) append("\nPuis $remaining autre${if (remaining > 1) "s" else ""} date${if (remaining > 1) "s" else ""}")
+        }
+    } else {
+        "${formatter.format(event.startsAt)}\n${formatter.format(event.endsAt)}"
+    }
+}
 private fun sourceLabel(url: String): String = runCatching {
     Uri.parse(url).host?.removePrefix("www.")?.takeIf(String::isNotBlank)
 }.getOrNull() ?: "la source"

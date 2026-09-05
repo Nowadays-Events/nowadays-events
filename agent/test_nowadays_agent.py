@@ -649,7 +649,7 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertTrue(should_export_event(cancelled, now))
         self.assertTrue(should_export_event(recurring, now))
 
-    def test_export_schedule_refreshes_active_recurrence_and_full_day_end(self):
+    def test_export_schedule_never_invents_recurrence_from_period_end(self):
         now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")
         item = {
             "start_at": "2026-07-01T00:00:00+00:00",
@@ -660,7 +660,8 @@ class NowadaysAgentTests(unittest.TestCase):
         }
         normalized = normalize_export_schedule(item, now)
         self.assertEqual("2026-08-16T23:59:59+00:00", normalized["end_at"])
-        self.assertEqual("2026-08-16T23:59:59+00:00", normalized["next_occurrence_at"])
+        self.assertIsNone(normalized["next_occurrence_at"])
+        self.assertFalse(should_export_event(normalized, now))
 
     def test_export_schedule_keeps_valid_future_occurrence(self):
         now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")

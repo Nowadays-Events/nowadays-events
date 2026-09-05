@@ -68,6 +68,7 @@ class EventMapController(
     private var pendingChildEventIds: Set<String> = emptySet()
     private var pendingChildCounts: Map<String, Int> = emptyMap()
     private var pendingExpandedMainEvent: Event? = null
+    private var pendingSelectedEventId: String? = null
     private var clusterMembers: Map<String, List<Event>> = emptyMap()
     private var expandedClusterEventIds: Set<String> = emptySet()
     private var renderedEventPoints: Map<String, Point> = emptyMap()
@@ -159,12 +160,14 @@ class EventMapController(
         childCounts: Map<String, Int> = emptyMap(),
         expandedMainEvent: Event? = null,
         expandedClusterIds: Set<String> = emptySet(),
+        selectedEventId: String? = null,
     ) {
         pendingEvents = events
         pendingMainEventIds = mainEventIds
         pendingChildEventIds = childEventIds
         pendingChildCounts = childCounts
         pendingExpandedMainEvent = expandedMainEvent
+        pendingSelectedEventId = selectedEventId
         expandedClusterEventIds = expandedClusterIds.intersect(events.map(Event::id).toSet())
         if (expandedClusterEventIds.isEmpty()) {
             clusterExpansionZoom = null
@@ -195,6 +198,7 @@ class EventMapController(
                         event = event,
                         isMain = event.id in pendingMainEventIds,
                         isChild = event.id in pendingChildEventIds,
+                        isSelected = event.id == pendingSelectedEventId,
                     ),
                 )
             }
@@ -242,7 +246,7 @@ class EventMapController(
                     Feature.fromGeometry(Point.fromLngLat(anchor.longitude, anchor.latitude)).apply {
                         addBooleanProperty(IS_CLUSTER_PROPERTY, true)
                         addNumberProperty(POINT_COUNT_PROPERTY, events.size)
-                        val hasCancelled = events.any { it.status == EventStatus.CANCELLED }
+                        val hasCancelled = ClusterMarkerPolicy.style(events).hasCancelledEvent
                         addStringProperty(CLUSTER_ICON_PROPERTY, clusterIconId(events.size, hasCancelled))
                         addStringProperty(CLUSTER_KEY_PROPERTY, key)
                     }
@@ -276,7 +280,7 @@ class EventMapController(
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (hasCancelled) Color.rgb(183, 28, 28) else Color.rgb(103, 80, 164)
+            color = Color.rgb(103, 80, 164)
             style = Paint.Style.FILL
         }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -294,6 +298,14 @@ class EventMapController(
         }
         val baseline = size / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
         canvas.drawText(count.toString(), size / 2f, baseline, textPaint)
+        if (hasCancelled) {
+            val warning = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(198, 40, 40) }
+            val warningBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f
+            }
+            canvas.drawCircle(57f, 15f, 8f, warning)
+            canvas.drawCircle(57f, 15f, 8f, warningBorder)
+        }
         return bitmap
     }
 
@@ -314,14 +326,14 @@ class EventMapController(
         return bitmap
     }
 
-    private fun createEventMarkerBitmap(event: Event, isMain: Boolean, isChild: Boolean): Bitmap {
+    private fun createEventMarkerBitmap(event: Event, isMain: Boolean, isChild: Boolean, isSelected: Boolean): Bitmap {
         val width = 112
         val height = 126
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val priority = MapMarkerPolicy.priority(event)
         val alpha = priority.alpha
-        val radius = priority.radius
+        val radius = priority.radius * 1.18f
         val isLongRunning = MapMarkerPolicy.isLongRunning(event)
         val isRecurring = MapMarkerPolicy.isRecurring(event)
         val isCancelled = event.status == EventStatus.CANCELLED
@@ -349,6 +361,13 @@ class EventMapController(
             color = Color.WHITE
             style = Paint.Style.STROKE
             strokeWidth = if (isMain) 7f else 4f
+        }
+        if (isSelected) {
+            canvas.drawCircle(width / 2f, 34f, radius + 7f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(255, 193, 7)
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+            })
         }
         if (isMain && !isCancelled && !isPostponed && !isUnverified) {
             canvas.drawCircle(width / 2f, 35f, radius + 6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {

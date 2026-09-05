@@ -21,6 +21,7 @@ fun EventMap(
     childCounts: Map<String, Int> = emptyMap(),
     expandedMainEvent: Event? = null,
     expandedClusterEventIds: Set<String> = emptySet(),
+    selectedEventId: String? = null,
     onEventSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     controller: EventMapController = remember(onEventSelected) { EventMapController(onEventSelected) },
@@ -38,7 +39,7 @@ fun EventMap(
     }
 
     AndroidView(factory = { mapView }, modifier = modifier, update = {
-        controller.setEvents(events, mainEventIds, childEventIds, childCounts, expandedMainEvent, expandedClusterEventIds)
+        controller.setEvents(events, mainEventIds, childEventIds, childCounts, expandedMainEvent, expandedClusterEventIds, selectedEventId)
     })
 
     DisposableEffect(lifecycle, mapView) {

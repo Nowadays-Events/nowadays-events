@@ -8,12 +8,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,6 +34,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -61,8 +69,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.nowadays.events.R
+import com.nowadays.events.BuildConfig
 import com.nowadays.events.domain.model.TimeFilter
 import com.nowadays.events.domain.model.EventCategory
+import com.nowadays.events.domain.model.EventStatus
+import com.nowadays.events.domain.usecase.NearbyEvent
+import com.nowadays.events.domain.usecase.NearbyEvents
 import com.nowadays.events.map.EventMap
 import com.nowadays.events.map.EventMapController
 import com.nowadays.events.presentation.detail.EventDetailSheet
@@ -85,6 +97,10 @@ fun MapScreen(
     val state by viewModel.uiState.collectAsState()
     var showCalendar by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    var showNearby by remember { mutableStateOf(false) }
+    var nearbyLocation by remember { mutableStateOf<LatLng?>(null) }
+    var nearbyRadiusKm by remember { mutableStateOf(15) }
+    var pendingNearbyRequest by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val cameraPreferences = remember { context.getSharedPreferences("map_camera", Context.MODE_PRIVATE) }
     val controller = remember {
@@ -106,7 +122,17 @@ fun MapScreen(
     val locationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
-        if (permissions.values.any { it }) recenterOnLastKnownLocation(context, controller)
+        if (permissions.values.any { it }) {
+            val location = lastKnownLocation(context)
+            if (pendingNearbyRequest) {
+                nearbyLocation = location
+                showNearby = true
+            } else recenterOnLastKnownLocation(context, controller)
+        } else if (pendingNearbyRequest) {
+            nearbyLocation = null
+            showNearby = true
+        }
+        pendingNearbyRequest = false
     }
     LaunchedEffect(focusLatitude, focusLongitude) {
         if (focusLatitude != null && focusLongitude != null) {
@@ -123,11 +149,25 @@ fun MapScreen(
     Scaffold(
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        pendingNearbyRequest = true
+                        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        if (granted) {
+                            nearbyLocation = lastKnownLocation(context)
+                            showNearby = true
+                            pendingNearbyRequest = false
+                        } else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+                    },
+                    icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
+                    text = { Text("Autour de moi") },
+                    modifier = Modifier.testTag("nearby-action"),
+                )
                 FloatingActionButton(onClick = {
                     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (granted) recenterOnLastKnownLocation(context, controller)
                     else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
-                }) {
+                }, modifier = Modifier.padding(top = 10.dp)) {
                     Icon(Icons.Default.MyLocation, contentDescription = "Recentrer la carte")
                 }
                 FloatingActionButton(onClick = onAddEvent, modifier = Modifier.padding(top = 12.dp)) {
@@ -144,6 +184,7 @@ fun MapScreen(
                 childCounts = state.childCounts,
                 expandedMainEvent = state.expandedMainEvent,
                 expandedClusterEventIds = state.expandedClusterEventIds,
+                selectedEventId = state.selectedEvent?.id,
                 onEventSelected = viewModel::selectEvent,
                 controller = controller,
                 modifier = Modifier.fillMaxSize(),
@@ -159,7 +200,7 @@ fun MapScreen(
                 )
                 state.dataUpdatedAt?.let { updatedAt ->
                     Text(
-                        "Actualisé le ${updatedAt.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))}",
+                        "Actualisé le ${updatedAt.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))} · v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelSmall.copy(shadow = mapTextShadow),
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -225,6 +266,30 @@ fun MapScreen(
                         viewModel.selectCustomRange(start, end)
                         showCalendar = false
                     },
+                    onAllDates = {
+                        viewModel.selectFilter(TimeFilter.ALL_FUTURE)
+                        showCalendar = false
+                    },
+                )
+            }
+            if (showNearby) {
+                val nearby = nearbyLocation?.let { location ->
+                    NearbyEvents.find(state.nearbyEvents, location.latitude, location.longitude, nearbyRadiusKm.toDouble())
+                }.orEmpty()
+                NearbyEventsSheet(
+                    results = nearby,
+                    radiusKm = nearbyRadiusKm,
+                    positionAvailable = nearbyLocation != null,
+                    onRadiusChanged = { nearbyRadiusKm = it },
+                    onEventSelected = { result ->
+                        showNearby = false
+                        viewModel.openNearbyEvent(result.event.id)
+                    },
+                    onRecenter = { result ->
+                        controller.recenter(LatLng(result.event.latitude, result.event.longitude), 13.0)
+                        showNearby = false
+                    },
+                    onDismiss = { showNearby = false },
                 )
             }
         }
@@ -295,12 +360,93 @@ private fun categoryLabel(category: EventCategory): String = when (category) {
 
 private fun recenterOnLastKnownLocation(context: Context, controller: EventMapController) {
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+    val location = lastKnownLocation(context)
+    if (location != null) controller.recenter(location, 14.0)
+    else controller.recenter()
+}
+
+private fun lastKnownLocation(context: Context): LatLng? {
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
     val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     val location = manager.getProviders(true).mapNotNull { provider ->
         runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
     }.maxByOrNull { it.time }
-    if (location != null) controller.recenter(LatLng(location.latitude, location.longitude), 14.0)
-    else controller.recenter()
+    return location?.let { LatLng(it.latitude, it.longitude) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun NearbyEventsSheet(
+    results: List<NearbyEvent>,
+    radiusKm: Int,
+    positionAvailable: Boolean,
+    onRadiusChanged: (Int) -> Unit,
+    onEventSelected: (NearbyEvent) -> Unit,
+    onRecenter: (NearbyEvent) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("nearby-sheet")) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text("Événements autour de moi", style = MaterialTheme.typography.titleMedium)
+            LazyRow(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                items(listOf(5, 15, 30, 50)) { radius ->
+                    AssistChip(
+                        onClick = { onRadiusChanged(radius) },
+                        label = { Text(if (radius == radiusKm) "✓ $radius km" else "$radius km") },
+                        colors = periodChipColors(radius == radiusKm),
+                        modifier = Modifier.padding(end = 6.dp).heightIn(min = 48.dp),
+                    )
+                }
+            }
+            when {
+                !positionAvailable -> Text(
+                    "Position indisponible. Autorisez la localisation ou activez-la, puis réessayez.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                results.isEmpty() -> Text("Aucun événement trouvé dans ce rayon.")
+                else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 430.dp)) {
+                    items(results, key = { it.event.id }) { result ->
+                        NearbyEventRow(result, onEventSelected, onRecenter)
+                    }
+                }
+            }
+            Spacer(Modifier.heightIn(min = 16.dp))
+        }
+    }
+}
+
+@Composable
+private fun NearbyEventRow(
+    result: NearbyEvent,
+    onSelected: (NearbyEvent) -> Unit,
+    onRecenter: (NearbyEvent) -> Unit,
+) {
+    val event = result.event
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onSelected(result) }
+            .testTag("nearby-result-${event.id}"),
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 2.dp,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(event.title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${(if (event.occurrenceCount > 1) event.nextOccurrenceAt ?: event.startsAt else event.startsAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))} · ${event.venueName.ifBlank { event.address }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "${if (result.distanceKm < 10) "%.1f".format(result.distanceKm) else "%.0f".format(result.distanceKm)} km${if (event.status == EventStatus.CANCELLED) " · Annulé" else ""}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+            IconButton(onClick = { onRecenter(result) }) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Recentrer la carte sur ${event.title}")
+            }
+        }
+    }
 }
 
 @Composable
@@ -315,27 +461,22 @@ internal fun FilterBar(
     val labels = listOf(
         TimeFilter.TODAY to "Aujourd’hui",
         TimeFilter.TOMORROW to "Demain",
-        TimeFilter.NEXT_7_DAYS to "7 prochains jours",
-        TimeFilter.THIS_WEEKEND to "Ce week-end",
-        TimeFilter.ALL_FUTURE to "Toutes les dates",
+        TimeFilter.NEXT_7_DAYS to "7 jours",
+        TimeFilter.THIS_WEEKEND to "Week-end",
     )
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 3.dp,
-        shadowElevation = 4.dp,
+    LazyRow(
+        modifier.fillMaxWidth().wrapContentSize().padding(horizontal = 8.dp)
+            .testTag("period-filter-bar"),
     ) {
-        LazyRow(
-            Modifier.fillMaxWidth().wrapContentSize().padding(8.dp).testTag("period-filter-bar"),
-        ) {
             items(labels) { (filter, label) ->
                 val isSelected = selected == filter
                 AssistChip(
                     onClick = { onSelected(filter) },
                     label = { Text(if (isSelected) "✓ $label" else label) },
                     colors = periodChipColors(isSelected),
-                    modifier = Modifier.padding(horizontal = 4.dp).testTag("period-${filter.name.lowercase()}"),
+                    elevation = AssistChipDefaults.assistChipElevation(elevation = 2.dp),
+                    modifier = Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp)
+                        .testTag("period-${filter.name.lowercase()}"),
                 )
             }
             item {
@@ -350,10 +491,11 @@ internal fun FilterBar(
                     leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                     label = { Text(if (isSelected) "✓ $customLabel" else customLabel) },
                     colors = periodChipColors(isSelected),
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    elevation = AssistChipDefaults.assistChipElevation(elevation = 2.dp),
+                    modifier = Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp)
+                        .testTag("period-calendar"),
                 )
             }
-        }
     }
 }
 
@@ -379,6 +521,7 @@ private fun DateFilterDialog(
     initialEnd: LocalDate?,
     onDismiss: () -> Unit,
     onConfirm: (LocalDate, LocalDate) -> Unit,
+    onAllDates: () -> Unit,
 ) {
     fun LocalDate.toPickerMillis() = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
     fun Long.toPickerDate() = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
@@ -398,7 +541,12 @@ private fun DateFilterDialog(
                 },
             ) { Text("Afficher") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onAllDates) { Text("Toutes les dates") }
+                TextButton(onClick = onDismiss) { Text("Annuler") }
+            }
+        },
     ) {
         DateRangePicker(
             state = pickerState,
