@@ -2,7 +2,7 @@ name: Check Android application
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/ux-finishing]
     paths:
       - ".github/workflows/android-check.yml"
       - "app/**"
