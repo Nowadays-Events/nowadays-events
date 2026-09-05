@@ -990,6 +990,19 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
                 event.occurrence_count, event.next_occurrence_at,
             ),
         )
+        # Répare les anciennes fusions géographiquement erronées : une URL de
+        # fiche précise ne doit pas rester rattachée à deux événements ayant la
+        # même empreinte. Les sources qui utilisent une URL de liste commune
+        # conservent leurs liens, car leurs empreintes sont distinctes.
+        connection.execute(
+            """
+            DELETE FROM event_sources
+            WHERE source_url=? AND external_id<>? AND external_id IN (
+                SELECT external_id FROM events WHERE fingerprint=?
+            )
+            """,
+            (event.source_url, chosen_id, event.fingerprint),
+        )
         connection.execute(
             """
             INSERT INTO event_sources VALUES (?,?,?,?)

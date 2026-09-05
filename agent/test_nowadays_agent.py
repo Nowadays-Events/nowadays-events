@@ -530,6 +530,31 @@ class NowadaysAgentTests(unittest.TestCase):
         persist(database, [first, second], "2026-09-01T10:00:00+00:00")
         self.assertEqual(2, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
 
+    def test_persist_repairs_source_url_from_legacy_distant_merge(self):
+        html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Forum des Associations",
+          "startDate":"2026-09-05T09:00:00+02:00", "endDate":"2026-09-05T17:00:00+02:00",
+          "location":{"name":"Salle municipale","geo":{"latitude":44.2010,"longitude":-1.2280}}
+        }</script>'''
+        mimizan = extract_events(html, "Mimizan", "https://mimizan.example/forum")[0]
+        saint_martin = extract_events(
+            html.replace("44.2010", "43.9287").replace("-1.2280", "-0.6403"),
+            "Saint-Martin", "https://saint-martin.example/forum",
+        )[0]
+        database = sqlite3.connect(":memory:")
+        database.executescript(SCHEMA)
+        persist(database, [mimizan], "2026-09-01T10:00:00+00:00")
+        database.execute(
+            "INSERT INTO event_sources VALUES (?,?,?,?)",
+            (mimizan.external_id, saint_martin.source_url, "Ancienne fusion", "2026-09-01"),
+        )
+        persist(database, [saint_martin], "2026-09-02T10:00:00+00:00")
+        owners = database.execute(
+            "SELECT external_id FROM event_sources WHERE source_url=?",
+            (saint_martin.source_url,),
+        ).fetchall()
+        self.assertEqual([(saint_martin.external_id,)], owners)
+
     def test_extracts_saint_pierre_event_with_geocoded_venue(self):
         body = '''<script type="application/ld+json">{
           "@context":"https://schema.org", "@type":"Event",
