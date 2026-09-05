@@ -74,6 +74,13 @@ Chaque source déclare maintenant son `type`, sa `priority` et son niveau de
 confiance `trust`. Les sources officielles sont traitées avant les sources
 secondaires lorsque la collecte approche de sa limite de temps.
 
+L'agenda officiel de Saint-Pierre-du-Mont est collecté directement. Ses fiches
+fournissent les dates et les lieux en JSON-LD mais pas toujours leurs coordonnées :
+le collecteur tente alors un géocodage par lieu et commune, puis utilise le centre
+communal si ce service est momentanément indisponible. Les agendas municipaux au
+format irrégulier, comme celui de Mazerolles, restent en observation et ne sont pas
+activés tant qu'ils ne permettent pas de distinguer fiablement événements et actualités.
+
 Ordre d’intégration retenu :
 
 1. offices de tourisme, collectivités et organisateurs officiels ;

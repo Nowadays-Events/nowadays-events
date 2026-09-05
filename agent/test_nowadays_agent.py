@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_pierre_event, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -513,6 +513,54 @@ class NowadaysAgentTests(unittest.TestCase):
             output = Path(directory) / "events.json"
             self.assertEqual(1, export_feed(database, output, datetime.fromisoformat("2026-08-01T00:00:00+00:00")))
             self.assertEqual(2, len(json.loads(output.read_text())["events"][0]["source_urls"]))
+
+    def test_persist_does_not_merge_same_fingerprint_in_different_towns(self):
+        html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Forum des Associations",
+          "startDate":"2026-09-05T09:00:00+02:00", "endDate":"2026-09-05T17:00:00+02:00",
+          "location":{"name":"Salle municipale","geo":{"latitude":43.8849,"longitude":-0.5217}}
+        }</script>'''
+        first = extract_events(html, "Saint-Pierre", "https://saint-pierre.example/forum")[0]
+        second = extract_events(
+            html.replace("43.8849", "44.2010").replace("-0.5217", "-1.2280"),
+            "Mimizan", "https://mimizan.example/forum",
+        )[0]
+        database = sqlite3.connect(":memory:")
+        database.executescript(SCHEMA)
+        persist(database, [first, second], "2026-09-01T10:00:00+00:00")
+        self.assertEqual(2, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
+    def test_extracts_saint_pierre_event_with_geocoded_venue(self):
+        body = '''<script type="application/ld+json">{
+          "@context":"https://schema.org", "@type":"Event",
+          "name":"Forum des Associations", "description":"Rencontrez les associations.",
+          "startDate":"2026-09-05T09:00:00+02:00", "endDate":"2026-09-05T17:00:00+02:00",
+          "location":{"@type":"Place","name":"Espace Multisports Saint-Pierrois"}
+        }</script>'''
+        event = extract_saint_pierre_event(
+            body, "Ville de Saint-Pierre-du-Mont", "https://example.org/evenement/forum",
+            geocode=lambda _: (43.8812, -0.5345),
+        )
+        self.assertIsNotNone(event)
+        self.assertEqual("Forum des Associations", event.title)
+        self.assertEqual("Espace Multisports Saint-Pierrois", event.venue)
+        self.assertEqual(43.8812, event.latitude)
+        self.assertEqual("2026-09-05", event.start_at[:10])
+
+    def test_saint_pierre_geocoding_failure_uses_configured_fallback(self):
+        body = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Vide-greniers", "startDate":"2026-09-13",
+          "location":{"name":"Maison du Temps Libre"}
+        }</script>'''
+        def unavailable(_: str):
+            raise URLError("geocoder unavailable")
+
+        event = extract_saint_pierre_event(
+            body, "Ville", "https://example.org/evenement/vide-greniers",
+            latitude=43.8849, longitude=-0.5217, geocode=unavailable,
+        )
+        self.assertIsNotNone(event)
+        self.assertEqual((43.8849, -0.5217), (event.latitude, event.longitude))
 
     def test_persist_merges_similar_parent_titles_from_two_sources(self):
         first_html = '''<script type="application/ld+json">{

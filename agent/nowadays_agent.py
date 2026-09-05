@@ -785,6 +785,49 @@ def extract_saint_sever_event(
     return event_from_json(node, source_name, page_url)
 
 
+def extract_saint_pierre_event(
+    body: str,
+    source_name: str,
+    page_url: str,
+    latitude: float = 43.8849,
+    longitude: float = -0.5217,
+    geocode: Callable[[str], tuple[float, float] | None] | None = None,
+) -> Event | None:
+    """Extrait une fiche Contao officielle, dont le JSON-LD omet les coordonnées."""
+    parser = JsonLdParser()
+    parser.feed(body)
+    for block in parser.blocks:
+        try:
+            payload = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        for raw_node in walk_events(payload):
+            node = dict(raw_node)
+            raw_location = node.get("location")
+            location = dict(raw_location) if isinstance(raw_location, dict) else {}
+            venue = first_text(location.get("name")) or "Saint-Pierre-du-Mont"
+            address = address_text(location.get("address")) or "40280 Saint-Pierre-du-Mont"
+            try:
+                coordinates = geocode(f"{venue}, {address}") if geocode else None
+            except Exception:
+                # Le géocodage affine le marqueur mais ne doit jamais rendre la
+                # source municipale indisponible.
+                coordinates = None
+            event_latitude, event_longitude = coordinates or (latitude, longitude)
+            location.update({
+                "@type": "Place",
+                "name": venue,
+                "address": address,
+                "geo": {"latitude": event_latitude, "longitude": event_longitude},
+            })
+            node["location"] = location
+            node["url"] = page_url
+            event = event_from_json(node, source_name, page_url)
+            if event:
+                return event
+    return None
+
+
 def extract_detail_events(
     source_type: str, body: str, source_name: str, detail_url: str,
 ) -> list[Event]:
@@ -796,6 +839,9 @@ def extract_detail_events(
         return [event] if event else []
     if source_type == "saint_sever_html":
         event = extract_saint_sever_event(body, source_name, detail_url)
+        return [event] if event else []
+    if source_type == "saint_pierre_html":
+        event = extract_saint_pierre_event(body, source_name, detail_url)
         return [event] if event else []
     return extract_events(body, source_name, detail_url)
 
@@ -885,9 +931,21 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
     inserted = updated = 0
     for event in events:
         existing = connection.execute(
-            "SELECT external_id,status FROM events WHERE external_id=? OR fingerprint=? LIMIT 1",
-            (event.external_id, event.fingerprint),
+            "SELECT external_id,status FROM events WHERE external_id=? LIMIT 1",
+            (event.external_id,),
         ).fetchone()
+        if not existing:
+            same_fingerprint = connection.execute(
+                """
+                SELECT external_id,title,start_at,end_at,latitude,longitude,status
+                FROM events WHERE fingerprint=?
+                """,
+                (event.fingerprint,),
+            ).fetchall()
+            existing = next((
+                (row[0], row[6]) for row in same_fingerprint
+                if likely_duplicate(event, row[1], row[2], row[3], row[4], row[5])
+            ), None)
         if not existing:
             nearby = connection.execute(
                 """
@@ -1229,7 +1287,7 @@ def run(
             timeout = min(20, max(1, int(deadline - time.monotonic())))
             if source_type in (
                 "jsonld", "armagnac_html", "biscarrosse_html", "dax_embedded",
-                "saint_sever_html",
+                "saint_sever_html", "saint_pierre_html",
             ):
                 body = fetch(source["url"], timeout=timeout)
                 candidates = (
@@ -1290,6 +1348,18 @@ def run(
                                 detail_url,
                                 latitude=float(source.get("latitude", 43.763267)),
                                 longitude=float(source.get("longitude", -0.55979)),
+                            )
+                            return ([event] if event else []), None
+                        if source_type == "saint_pierre_html":
+                            event = extract_saint_pierre_event(
+                                detail_body,
+                                source["name"],
+                                detail_url,
+                                latitude=float(source.get("latitude", 43.8849)),
+                                longitude=float(source.get("longitude", -0.5217)),
+                                geocode=lambda query: geocode_french_address(
+                                    query, "Saint-Pierre-du-Mont", timeout=min(8, max(1, remaining)),
+                                ),
                             )
                             return ([event] if event else []), None
                         return extract_detail_events(source_type, detail_body, source["name"], detail_url), None
