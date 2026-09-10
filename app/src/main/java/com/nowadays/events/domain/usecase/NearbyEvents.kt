@@ -5,19 +5,22 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import java.time.Instant
 
 data class NearbyEvent(val event: Event, val distanceKm: Double)
 
 object NearbyEvents {
     fun find(
         events: List<Event>, latitude: Double, longitude: Double, radiusKm: Double,
+        now: Instant = Instant.now(),
     ): List<NearbyEvent> {
         if (!valid(latitude, longitude) || radiusKm < 0) return emptyList()
         return events.asSequence()
             .filter { valid(it.latitude, it.longitude) }
             .map { NearbyEvent(it, distanceKm(latitude, longitude, it.latitude, it.longitude)) }
             .filter { it.distanceKm <= radiusKm }
-            .sortedWith(compareBy<NearbyEvent> { it.distanceKm }.thenBy { it.event.id })
+            .sortedWith(compareBy<NearbyEvent> { if (it.event.startsAt <= now && it.event.endsAt >= now) 0 else 1 }
+                .thenBy { it.distanceKm }.thenBy { it.event.startsAt }.thenBy { it.event.id })
             .toList()
     }
 

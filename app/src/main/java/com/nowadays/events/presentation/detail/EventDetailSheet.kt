@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.core.net.toUri
 import com.nowadays.events.domain.model.*
+import com.nowadays.events.presentation.eventScheduleLabel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -249,6 +250,8 @@ internal fun eventDateLabel(event: Event, formatter: DateTimeFormatter): String 
             append("Prochaine date : ${formatter.format(next)}")
             if (remaining > 0) append("\nPuis $remaining autre${if (remaining > 1) "s" else ""} date${if (remaining > 1) "s" else ""}")
         }
+    } else if (event.timePrecision != EventTimePrecision.EXACT) {
+        eventScheduleLabel(event)
     } else {
         "${formatter.format(event.startsAt)}\n${formatter.format(event.endsAt)}"
     }

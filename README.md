@@ -56,3 +56,15 @@ La localisation n’est demandée qu’après action explicite. Les réponses «
 
 MapLibre Native est configuré comme moteur. Aucun fournisseur de tuiles ni secret n’est codé en dur. L’attribution et les conditions du fournisseur devront être respectées lors de l’implémentation de la carte.
 Le style public de démonstration MapLibre est utilisé uniquement pour le développement. Il doit être remplacé par une configuration de fournisseur explicitement dimensionnée avant publication.
+# Accueil liste et précision des horaires
+
+L’écran d’accueil privilégie désormais une liste d’événements classés localement par proximité. La référence par défaut est Biscarrosse-ville ; Biscarrosse-Plage et la dernière position connue sont proposées sans envoyer la position à un serveur. Les rayons disponibles sont 5, 15, 30 et 50 km. La carte reste accessible depuis l’en-tête et s’ouvre sur l’événement choisi.
+
+Le flux accepte deux champs facultatifs et rétrocompatibles :
+
+- `time_precision` : `exact`, `approximate`, `date_only` ou `unknown` ;
+- `original_time_text` : formulation source utile, par exemple `En soirée`.
+
+Un ancien flux sans ces champs reste accepté. Par prudence, une heure locale exactement à minuit issue d’un ancien flux est interprétée comme une date seule ; une source qui annonce réellement minuit doit publier `time_precision: "exact"`. Room migre explicitement de la version 6 à la version 7, sans suppression de données.
+
+La classification affichée dans la liste est déterministe : elle utilise uniquement le titre, la description, la catégorie, l’organisateur, le lieu, le tarif et le nombre de sources. Elle constitue une aide de lecture et non une affirmation provenant de l’organisateur.

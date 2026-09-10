@@ -88,8 +88,10 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MapScreen(
     onAddEvent: () -> Unit,
+    onBackToList: () -> Unit = {},
     focusLatitude: Double? = null,
     focusLongitude: Double? = null,
+    focusEventId: String? = null,
     onFocusHandled: () -> Unit = {},
     viewModel: MapViewModel = hiltViewModel(),
 ) {
@@ -100,6 +102,7 @@ fun MapScreen(
     var nearbyLocation by remember { mutableStateOf<LatLng?>(null) }
     var nearbyRadiusKm by remember { mutableStateOf(15) }
     var pendingNearbyRequest by remember { mutableStateOf(false) }
+    var focusApplied by remember(focusLatitude, focusLongitude, focusEventId) { mutableStateOf(false) }
     val context = LocalContext.current
     val cameraPreferences = remember { context.getSharedPreferences("map_camera", Context.MODE_PRIVATE) }
     val controller = remember {
@@ -133,10 +136,12 @@ fun MapScreen(
         }
         pendingNearbyRequest = false
     }
-    LaunchedEffect(focusLatitude, focusLongitude) {
-        if (focusLatitude != null && focusLongitude != null) {
+    LaunchedEffect(focusLatitude, focusLongitude, focusEventId, state.events) {
+        if (!focusApplied && focusLatitude != null && focusLongitude != null && (focusEventId == null || state.nearbyEvents.any { it.id == focusEventId })) {
+            focusApplied = true
             viewModel.selectFilter(TimeFilter.ALL_FUTURE)
             controller.recenter(LatLng(focusLatitude, focusLongitude), 14.0)
+            focusEventId?.takeIf { id -> state.nearbyEvents.any { it.id == id } }?.let(viewModel::openNearbyEvent)
             onFocusHandled()
         }
     }
@@ -205,6 +210,10 @@ fun MapScreen(
                     )
                 }
             }
+            SmallFloatingActionButton(
+                onClick = onBackToList,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 76.dp).testTag("back-to-list"),
+            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour à la liste") }
             FilterBar(
                 selected = state.selectedFilter,
                 customStartDate = state.customStartDate,
@@ -515,7 +524,7 @@ private fun periodChipColors(selected: Boolean) = if (selected) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateFilterDialog(
+internal fun DateFilterDialog(
     initialStart: LocalDate?,
     initialEnd: LocalDate?,
     onDismiss: () -> Unit,

@@ -98,6 +98,8 @@ class Event:
     currency: str = "EUR"
     occurrence_count: int = 1
     next_occurrence_at: str | None = None
+    time_precision: str = "exact"
+    original_time_text: str | None = None
 
 
 def normalize(value: str) -> str:
@@ -274,6 +276,11 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     price_type, price_cents, currency = event_price(node)
     occurrence_count = max(1, int(node.get("occurrenceCount") or 1))
     next_occurrence_at = iso_datetime(node.get("nextOccurrenceDate")) or None
+    raw_start = str(node.get("startDate") or "").strip()
+    explicit_precision = normalize(str(node.get("timePrecision") or "")).replace(" ", "_")
+    time_precision = explicit_precision if explicit_precision in {"exact", "approximate", "date_only", "unknown"} else (
+        "date_only" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_start) else "exact"
+    )
     return Event(
         external_id=external_id,
         title=title,
@@ -294,6 +301,8 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
         currency=currency,
         occurrence_count=occurrence_count,
         next_occurrence_at=next_occurrence_at,
+        time_precision=time_precision,
+        original_time_text=first_text(node.get("originalTimeText")) or None,
     )
 
 
@@ -661,13 +670,13 @@ def extract_biscarrosse_event(
         return None
 
     time_match = re.search(
-        r'(?:De\s*)?(\d{1,2})[h:](\d{2})(?:\s*(?:a|à)\s*(\d{1,2})[h:](\d{2}))?',
-        description, re.IGNORECASE,
+        r'(?:De\s*)?(\d{1,2})\s*[h:](\d{2})?(?:\s*(?:a|à|-)\s*(\d{1,2})\s*[h:](\d{2})?)?',
+        f"{description} {html_fragment_text(body)}", re.IGNORECASE,
     )
     start_hour = int(time_match.group(1)) if time_match else 0
-    start_minute = int(time_match.group(2)) if time_match else 0
+    start_minute = int(time_match.group(2) or 0) if time_match else 0
     end_hour = int(time_match.group(3)) if time_match and time_match.group(3) else start_hour
-    end_minute = int(time_match.group(4)) if time_match and time_match.group(4) else start_minute
+    end_minute = int(time_match.group(4) or 0) if time_match and time_match.group(3) else start_minute
     start = min(dates).replace(hour=start_hour, minute=start_minute)
     end = max(dates).replace(hour=end_hour, minute=end_minute)
     if len(heading_dates) >= 2:
@@ -715,6 +724,8 @@ def extract_biscarrosse_event(
         "url": page_url,
         "occurrenceCount": max(len(set(explicit_dates)), 2 if start.date() != end.date() else 1),
         "nextOccurrenceDate": next_occurrence.isoformat() if next_occurrence else None,
+        "timePrecision": "exact" if time_match else "date_only",
+        "originalTimeText": time_match.group(0).strip() if time_match else None,
         "location": {
             "@type": "Place",
             "name": venue,
@@ -915,6 +926,8 @@ CREATE TABLE IF NOT EXISTS events (
     ,currency TEXT NOT NULL DEFAULT 'EUR'
     ,occurrence_count INTEGER NOT NULL DEFAULT 1
     ,next_occurrence_at TEXT
+    ,time_precision TEXT NOT NULL DEFAULT 'exact'
+    ,original_time_text TEXT
 );
 CREATE TABLE IF NOT EXISTS event_sources (
     external_id TEXT NOT NULL,
@@ -925,6 +938,14 @@ CREATE TABLE IF NOT EXISTS event_sources (
 );
 CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint);
 """
+
+
+def ensure_optional_columns(connection: sqlite3.Connection) -> None:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+    if "time_precision" not in columns:
+        connection.execute("ALTER TABLE events ADD COLUMN time_precision TEXT NOT NULL DEFAULT 'exact'")
+    if "original_time_text" not in columns:
+        connection.execute("ALTER TABLE events ADD COLUMN original_time_text TEXT")
 
 
 def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -> tuple[int, int]:
@@ -970,8 +991,8 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
             INSERT INTO events
             (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,status,
              fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
-             occurrence_count,next_occurrence_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             occurrence_count,next_occurrence_at,time_precision,original_time_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(external_id) DO UPDATE SET
               title=excluded.title, description=excluded.description,
               start_at=excluded.start_at, end_at=excluded.end_at,
@@ -981,13 +1002,14 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
               category=excluded.category, price_type=excluded.price_type,
               price_cents=excluded.price_cents, currency=excluded.currency,
               occurrence_count=excluded.occurrence_count, next_occurrence_at=excluded.next_occurrence_at,
+              time_precision=excluded.time_precision, original_time_text=excluded.original_time_text,
               last_seen_at=excluded.last_seen_at
             """,
             (
                 chosen_id, event.title, event.description, event.start_at, event.end_at,
                 event.venue, event.address, event.latitude, event.longitude, event.status,
                 event.fingerprint, now, now, event.category, event.price_type, event.price_cents, event.currency,
-                event.occurrence_count, event.next_occurrence_at,
+                event.occurrence_count, event.next_occurrence_at, event.time_precision, event.original_time_text,
             ),
         )
         # Répare les anciennes fusions géographiquement erronées : une URL de
@@ -1019,7 +1041,7 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
         return 0
     payload = json.loads(feed_path.read_text(encoding="utf-8"))
     hydrated = 0
-    history_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    history_cutoff = datetime.now(timezone.utc) - timedelta(days=45)
     for item in payload.get("events", []):
         required = ("external_id", "title", "start_at", "end_at", "latitude", "longitude")
         if any(item.get(key) is None for key in required):
@@ -1037,8 +1059,8 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
             INSERT OR IGNORE INTO events
             (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,
              status,fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
-             occurrence_count,next_occurrence_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             occurrence_count,next_occurrence_at,time_precision,original_time_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 item["external_id"], item["title"], item.get("description", ""),
@@ -1050,6 +1072,7 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
                 item.get("category", "COMMUNITY"), item.get("price_type", "unknown"),
                 item.get("price_cents"), item.get("currency", "EUR"),
                 item.get("occurrence_count", 1), item.get("next_occurrence_at"),
+                item.get("time_precision", "exact"), item.get("original_time_text"),
             ),
         )
         for url in item.get("source_urls") or []:
@@ -1457,6 +1480,7 @@ def run(
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(database_path) as connection:
         connection.executescript(SCHEMA)
+        ensure_optional_columns(connection)
         hydrated = hydrate_previous_feed(connection, previous_feed_path)
         inserted, updated = persist(connection, collected, now)
         unverified = mark_unverified(connection, now)

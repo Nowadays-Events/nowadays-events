@@ -27,12 +27,15 @@ data class Event(
     val occurrenceCount: Int = 1,
     val nextOccurrenceAt: Instant? = null,
     val sourceUrls: List<String> = listOf(sourceUrl),
+    val timePrecision: EventTimePrecision = EventTimePrecision.EXACT,
+    val originalTimeText: String? = null,
 )
 
 enum class EventCategory { CULTURE, MUSIC, SPORT, FOOD, FAMILY, COMMUNITY, TECHNOLOGY }
 enum class DataOrigin { DEMO, MANUAL, AUTOMATIC }
 enum class AttendanceResponse { NONE, GOING, MAYBE }
 enum class EventStatus { ACTIVE, POSTPONED, CANCELLED, UNVERIFIED }
+enum class EventTimePrecision { EXACT, APPROXIMATE, DATE_ONLY, UNKNOWN }
 
 sealed interface EventPrice {
     data object Unknown : EventPrice

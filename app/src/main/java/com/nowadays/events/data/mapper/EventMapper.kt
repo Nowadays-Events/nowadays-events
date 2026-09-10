@@ -6,6 +6,7 @@ import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.model.EventStatus
+import com.nowadays.events.domain.model.EventTimePrecision
 import java.time.Instant
 
 fun EventEntity.toDomain(): Event = Event(
@@ -26,6 +27,8 @@ fun EventEntity.toDomain(): Event = Event(
     status = runCatching { EventStatus.valueOf(status) }.getOrDefault(EventStatus.ACTIVE),
     occurrenceCount = occurrenceCount,
     nextOccurrenceAt = nextOccurrenceAtEpochMillis?.let(Instant::ofEpochMilli),
+    timePrecision = runCatching { EventTimePrecision.valueOf(timePrecision) }.getOrDefault(EventTimePrecision.EXACT),
+    originalTimeText = originalTimeText,
 )
 
 fun Event.toEntity(): EventEntity = EventEntity(
@@ -45,4 +48,6 @@ fun Event.toEntity(): EventEntity = EventEntity(
     status = status.name,
     occurrenceCount = occurrenceCount,
     nextOccurrenceAtEpochMillis = nextOccurrenceAt?.toEpochMilli(),
+    timePrecision = timePrecision.name,
+    originalTimeText = originalTimeText,
 )

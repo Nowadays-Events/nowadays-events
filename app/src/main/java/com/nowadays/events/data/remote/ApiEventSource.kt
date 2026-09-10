@@ -6,6 +6,8 @@ import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.model.EventStatus
+import com.nowadays.events.domain.model.EventTimePrecision
+import java.time.ZoneId
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -81,6 +83,8 @@ class ApiEventSource @Inject constructor() : EventSource {
                             },
                             occurrenceCount = item.optInt("occurrence_count", 1).coerceAtLeast(1),
                             nextOccurrenceAt = item.instant("next_occurrence_at"),
+                            timePrecision = item.timePrecision(start),
+                            originalTimeText = item.optString("original_time_text").ifBlank { null },
                         ),
                     )
                 }
@@ -93,6 +97,16 @@ class ApiEventSource @Inject constructor() : EventSource {
 
 private fun JSONObject.instant(key: String): Instant? =
     optString(key).takeIf(String::isNotBlank)?.let { runCatching { Instant.parse(it) }.getOrNull() }
+
+private fun JSONObject.timePrecision(start: Instant): EventTimePrecision {
+    val explicit = optString("time_precision").uppercase()
+    if (explicit.isNotBlank()) {
+        return runCatching { EventTimePrecision.valueOf(explicit) }.getOrDefault(EventTimePrecision.UNKNOWN)
+    }
+    // Legacy feeds encoded a date without a known time as local midnight.
+    return if (start.atZone(ZoneId.of("Europe/Paris")).toLocalTime() == java.time.LocalTime.MIDNIGHT)
+        EventTimePrecision.DATE_ONLY else EventTimePrecision.EXACT
+}
 
 private fun String.toCategory(): EventCategory =
     runCatching { EventCategory.valueOf(uppercase()) }.getOrDefault(EventCategory.COMMUNITY)

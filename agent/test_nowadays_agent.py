@@ -401,6 +401,8 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("Arcanson", event.venue)
         self.assertIn("61 Rue", event.address)
         self.assertEqual("2026-08-29T08:00:00+00:00", event.start_at)
+        self.assertEqual("exact", event.time_precision)
+        self.assertEqual("De 10:00 à 16:00", event.original_time_text)
         self.assertEqual("free", event.price_type)
         self.assertEqual(
             [event],
@@ -408,6 +410,19 @@ class NowadaysAgentTests(unittest.TestCase):
                 "biscarrosse_html", body, "Ville de Biscarrosse", "https://example.org/agenda/forum/",
             ),
         )
+
+    def test_biscarrosse_date_without_time_is_explicitly_date_only(self):
+        body = '''
+        <meta name="description" content="Le 12/09/2026 Animation locale" />
+        <h1 class="cover__title">Faîtes de l’AMAP</h1>
+        <h2 class="date-event__title">Le samedi 12 septembre 2026</h2>
+        <p class="listing__location"><strong>Centre-ville</strong>40600 Biscarrosse</p>
+        <div class="map" data-lat="44.3947" data-long="-1.1678"></div>
+        '''
+        event = extract_biscarrosse_event(body, "Ville de Biscarrosse", "https://example.org/amap")
+        self.assertIsNotNone(event)
+        self.assertEqual("date_only", event.time_precision)
+        self.assertIsNone(event.original_time_text)
 
     def test_geocodes_biscarrosse_event_only_when_map_coordinates_are_missing(self):
         body = '''

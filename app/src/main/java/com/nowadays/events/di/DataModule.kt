@@ -9,6 +9,7 @@ import com.nowadays.events.data.local.MIGRATION_2_3
 import com.nowadays.events.data.local.MIGRATION_3_4
 import com.nowadays.events.data.local.MIGRATION_4_5
 import com.nowadays.events.data.local.MIGRATION_5_6
+import com.nowadays.events.data.local.MIGRATION_6_7
 import com.nowadays.events.data.repository.OfflineFirstEventRepository
 import com.nowadays.events.data.remote.EventSource
 import com.nowadays.events.data.remote.ApiEventSource
@@ -38,7 +39,7 @@ object DataModule {
     @Provides @Singleton fun provideClock(): Clock = Clock.systemDefaultZone()
     @Provides @Singleton fun provideDatabase(@ApplicationContext context: Context): EventDatabase =
         Room.databaseBuilder(context, EventDatabase::class.java, "events.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
     @Provides fun provideEventDao(database: EventDatabase): EventDao = database.eventDao()
 }
