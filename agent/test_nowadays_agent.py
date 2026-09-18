@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_pierre_event, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, consolidate_duplicates, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_pierre_event, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -638,6 +638,37 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
         self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
 
+    def test_consolidates_duplicates_already_present_in_hydrated_history(self):
+        first_html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Fête des végétaux", "startDate":"2026-09-26",
+          "endDate":"2026-09-27", "location":{"name":"Micro-forêt",
+          "geo":{"latitude":43.8764,"longitude":-0.4847}}
+        }</script>'''
+        second_html = first_html.replace('Fête des végétaux', 'Végétaux en fête').replace(
+            '2026-09-26"', '2026-09-26T00:00:00+02:00"'
+        ).replace('2026-09-27"', '2026-09-28"')
+        first = extract_events(first_html, "A", "https://a.example/vegetaux")[0]
+        second = extract_events(second_html, "B", "https://b.example/vegetaux")[0]
+        database = sqlite3.connect(":memory:")
+        database.executescript(SCHEMA)
+        persist(database, [first], "2026-09-01T10:00:00+00:00")
+        # Simule un ancien flux où la seconde fiche avait déjà son propre ID.
+        database.execute(
+            """INSERT INTO events SELECT ?,title,description,?,end_at,venue,address,latitude,
+                      longitude,status,?,first_seen_at,last_seen_at,category,price_type,
+                      price_cents,currency,occurrence_count,next_occurrence_at,time_precision,
+                      original_time_text FROM events WHERE external_id=?""",
+            (second.external_id, second.start_at, second.fingerprint, first.external_id),
+        )
+        database.execute(
+            "INSERT INTO event_sources VALUES (?,?,?,?)",
+            (second.external_id, second.source_url, second.source_name, "2026-09-01T10:00:00+00:00"),
+        )
+
+        self.assertEqual(1, consolidate_duplicates(database))
+        self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+        self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
+
     def test_specific_sub_event_is_not_merged_with_parent(self):
         parent_html = '''<script type="application/ld+json">{
           "@type":"Event", "name":"Fêtes de la Madeleine",
@@ -682,6 +713,20 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertFalse(should_export_event(expired, now))
         self.assertTrue(should_export_event(cancelled, now))
         self.assertTrue(should_export_event(recurring, now))
+
+    def test_public_feed_hides_stale_unverified_event_after_one_week(self):
+        now = datetime.fromisoformat("2026-09-19T00:00:00+00:00")
+        base = {
+            "end_at": "2026-10-01T00:00:00+00:00",
+            "status": "unverified",
+            "occurrence_count": 1,
+        }
+        self.assertTrue(should_export_event(
+            {**base, "last_seen_at": "2026-09-18T00:00:00+00:00"}, now,
+        ))
+        self.assertFalse(should_export_event(
+            {**base, "last_seen_at": "2026-09-08T00:00:00+00:00"}, now,
+        ))
 
     def test_export_schedule_never_invents_recurrence_from_period_end(self):
         now = datetime.fromisoformat("2026-08-16T12:00:00+00:00")

@@ -1072,6 +1072,51 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
     return inserted, updated
 
 
+def consolidate_duplicates(connection: sqlite3.Connection) -> int:
+    """Fusionne aussi les doublons déjà présents dans un flux historique hydraté."""
+    rows = connection.execute(
+        """
+        SELECT external_id,title,description,start_at,end_at,venue,address,
+               latitude,longitude,status,fingerprint,last_seen_at
+        FROM events ORDER BY start_at, external_id
+        """
+    ).fetchall()
+    kept: list[tuple] = []
+    merged = 0
+    for row in rows:
+        candidate = Event(
+            external_id=row[0], title=row[1], description=row[2], start_at=row[3],
+            end_at=row[4], venue=row[5], address=row[6], latitude=row[7],
+            longitude=row[8], source_url="", source_name="", status=row[9],
+            fingerprint=row[10],
+        )
+        duplicate = next((
+            existing for existing in kept
+            if likely_duplicate(
+                candidate, existing[1], existing[3], existing[4], existing[7], existing[8],
+            )
+        ), None)
+        if duplicate is None:
+            kept.append(row)
+            continue
+        canonical_id = duplicate[0]
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO event_sources (external_id,source_url,source_name,last_seen_at)
+            SELECT ?,source_url,source_name,last_seen_at FROM event_sources WHERE external_id=?
+            """,
+            (canonical_id, row[0]),
+        )
+        connection.execute("DELETE FROM event_sources WHERE external_id=?", (row[0],))
+        connection.execute(
+            "UPDATE events SET status=?, last_seen_at=max(last_seen_at,?) WHERE external_id=?",
+            (merge_event_status(duplicate[9], row[9]), row[11], canonical_id),
+        )
+        connection.execute("DELETE FROM events WHERE external_id=?", (row[0],))
+        merged += 1
+    return merged
+
+
 def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None) -> int:
     """Recharge le dernier flux public pour conserver l'historique entre deux runners GitHub."""
     if feed_path is None or not feed_path.exists():
@@ -1140,6 +1185,19 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
     status = str(item.get("status") or "active")
     if status in ("cancelled", "postponed"):
         return end >= now - timedelta(days=30)
+    if status == "unverified":
+        try:
+            last_seen = datetime.fromisoformat(
+                str(item.get("last_seen_at") or "").replace("Z", "+00:00")
+            )
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return False
+        # Une source peut manquer une fiche pendant quelques collectes, mais
+        # un événement absent depuis une semaine ne doit plus encombrer la liste.
+        if last_seen < now - timedelta(days=7):
+            return False
     next_occurrence = item.get("next_occurrence_at")
     if next_occurrence:
         try:
@@ -1520,6 +1578,7 @@ def run(
         ensure_optional_columns(connection)
         hydrated = hydrate_previous_feed(connection, previous_feed_path)
         inserted, updated = persist(connection, collected, now)
+        consolidated = consolidate_duplicates(connection)
         unverified = mark_unverified(connection, now)
         exported = export_feed(connection, output_path)
     pending_candidates = export_candidates(config, output_path.with_name("candidates.json"), now)
@@ -1534,6 +1593,7 @@ def run(
         "fetched_events": len(collected),
         "inserted": inserted,
         "updated": updated,
+        "consolidated_duplicates": consolidated,
         "hydrated_from_previous_feed": hydrated,
         "marked_unverified": unverified,
         "exported": exported,

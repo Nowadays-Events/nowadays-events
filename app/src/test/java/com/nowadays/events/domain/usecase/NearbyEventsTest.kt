@@ -1,5 +1,6 @@
 package com.nowadays.events.domain.usecase
 
+import com.nowadays.events.domain.model.EventStatus
 import com.nowadays.events.support.DeterministicEventFixtures.event
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -43,6 +44,20 @@ class NearbyEventsTest {
         )
         assertEquals(listOf("ongoing", "close"), NearbyEvents.find(
             listOf(close, ongoing), 43.89, -0.50, 10.0, now,
+        ).map { it.event.id })
+    }
+
+    @Test fun `cancelled event never takes priority over an active event`() {
+        val now = Instant.parse("2026-08-01T12:00:00Z")
+        val cancelled = event("cancelled", latitude = 43.891).copy(
+            startsAt = now.minusSeconds(600), endsAt = now.plusSeconds(600),
+            status = EventStatus.CANCELLED,
+        )
+        val active = event("active", latitude = 43.92).copy(
+            startsAt = now.plusSeconds(600), endsAt = now.plusSeconds(1200),
+        )
+        assertEquals(listOf("active", "cancelled"), NearbyEvents.find(
+            listOf(cancelled, active), 43.89, -0.50, 10.0, now,
         ).map { it.event.id })
     }
 

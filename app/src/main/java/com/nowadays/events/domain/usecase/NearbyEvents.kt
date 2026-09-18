@@ -1,6 +1,7 @@
 package com.nowadays.events.domain.usecase
 
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventStatus
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -19,7 +20,8 @@ object NearbyEvents {
             .filter { valid(it.latitude, it.longitude) }
             .map { NearbyEvent(it, distanceKm(latitude, longitude, it.latitude, it.longitude)) }
             .filter { it.distanceKm <= radiusKm }
-            .sortedWith(compareBy<NearbyEvent> { if (it.event.startsAt <= now && it.event.endsAt >= now) 0 else 1 }
+            .sortedWith(compareBy<NearbyEvent> { if (it.event.status == EventStatus.CANCELLED) 1 else 0 }
+                .thenBy { if (it.event.startsAt <= now && it.event.endsAt >= now) 0 else 1 }
                 .thenBy { it.distanceKm }.thenBy { it.event.startsAt }.thenBy { it.event.id })
             .toList()
     }
