@@ -34,8 +34,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private data class ReferencePlace(val label: String, val latitude: Double, val longitude: Double)
-private val biscarrosseTown = ReferencePlace("Biscarrosse-ville", 44.3947, -1.1678)
-private val biscarrosseBeach = ReferencePlace("Biscarrosse-Plage", 44.4460, -1.2520)
+private val montDeMarsan = ReferencePlace("Mont-de-Marsan", 43.8904, -0.5007)
+private val saintPierreDuMont = ReferencePlace("Saint-Pierre-du-Mont", 43.8849, -0.5217)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +47,7 @@ fun EventListScreen(
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("event_list", Context.MODE_PRIVATE) }
     var reference by remember {
-        mutableStateOf(if (preferences.getString("reference", "town") == "beach") biscarrosseBeach else biscarrosseTown)
+        mutableStateOf(if (preferences.getString("reference", "mont-de-marsan") == "saint-pierre") saintPierreDuMont else montDeMarsan)
     }
     var customLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var usingMyPosition by remember { mutableStateOf(false) }
@@ -95,20 +95,20 @@ fun EventListScreen(
                 item {
                     AssistChip(
                         onClick = {
-                            usingMyPosition = false; customLocation = null; reference = biscarrosseTown
-                            preferences.edit().putString("reference", "town").apply()
+                            usingMyPosition = false; customLocation = null; reference = montDeMarsan
+                            preferences.edit().putString("reference", "mont-de-marsan").apply()
                         },
-                        label = { Text(if (!usingMyPosition && reference == biscarrosseTown) "✓ Ville" else "Ville") },
+                        label = { Text(if (!usingMyPosition && reference == montDeMarsan) "✓ Mont-de-Marsan" else "Mont-de-Marsan") },
                         modifier = Modifier.padding(end = 6.dp).heightIn(min = 48.dp),
                     )
                 }
                 item {
                     AssistChip(
                         onClick = {
-                            usingMyPosition = false; customLocation = null; reference = biscarrosseBeach
-                            preferences.edit().putString("reference", "beach").apply()
+                            usingMyPosition = false; customLocation = null; reference = saintPierreDuMont
+                            preferences.edit().putString("reference", "saint-pierre").apply()
                         },
-                        label = { Text(if (!usingMyPosition && reference == biscarrosseBeach) "✓ Plage" else "Plage") },
+                        label = { Text(if (!usingMyPosition && reference == saintPierreDuMont) "✓ Saint-Pierre" else "Saint-Pierre") },
                         modifier = Modifier.padding(end = 6.dp).heightIn(min = 48.dp),
                     )
                 }

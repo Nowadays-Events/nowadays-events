@@ -129,9 +129,30 @@ def likely_duplicate(
     latitude: float,
     longitude: float,
 ) -> bool:
-    if event.start_at[:10] != start_at[:10] or event.end_at[:10] != end_at[:10]:
+    def local_date(value: str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ZoneInfo("Europe/Paris")).date()
+
+    try:
+        left_start = local_date(event.start_at)
+        right_start = local_date(start_at)
+    except ValueError:
         return False
-    if distance_km(event.latitude, event.longitude, latitude, longitude) > 1.5:
+    if left_start != right_start:
+        return False
+    try:
+        left_end = local_date(event.end_at)
+        right_end = local_date(end_at)
+    except ValueError:
+        return False
+    # Deux agendas décrivent souvent une période « jusqu'au 27 » soit avec
+    # une fin au 27 à minuit, soit avec une fin au 28 à minuit. Ce décalage
+    # technique ne doit pas créer deux fiches pour le même événement.
+    if abs((left_end - right_end).days) > 1:
+        return False
+    if distance_km(event.latitude, event.longitude, latitude, longitude) > 3.0:
         return False
     left = significant_title_tokens(event.title)
     right = significant_title_tokens(title)
@@ -833,6 +854,9 @@ def extract_saint_pierre_event(
             })
             node["location"] = location
             node["url"] = page_url
+            raw_start = str(node.get("startDate") or "")
+            if re.search(r"T00:00(?::00)?(?:[+-]\d\d:?\d\d|Z)?$", raw_start):
+                node["timePrecision"] = "date_only"
             event = event_from_json(node, source_name, page_url)
             if event:
                 return event
@@ -942,10 +966,19 @@ CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint);
 
 def ensure_optional_columns(connection: sqlite3.Connection) -> None:
     columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
-    if "time_precision" not in columns:
-        connection.execute("ALTER TABLE events ADD COLUMN time_precision TEXT NOT NULL DEFAULT 'exact'")
-    if "original_time_text" not in columns:
-        connection.execute("ALTER TABLE events ADD COLUMN original_time_text TEXT")
+    optional_columns = {
+        "category": "TEXT NOT NULL DEFAULT 'COMMUNITY'",
+        "price_type": "TEXT NOT NULL DEFAULT 'unknown'",
+        "price_cents": "INTEGER",
+        "currency": "TEXT NOT NULL DEFAULT 'EUR'",
+        "occurrence_count": "INTEGER NOT NULL DEFAULT 1",
+        "next_occurrence_at": "TEXT",
+        "time_precision": "TEXT NOT NULL DEFAULT 'exact'",
+        "original_time_text": "TEXT",
+    }
+    for name, declaration in optional_columns.items():
+        if name not in columns:
+            connection.execute(f"ALTER TABLE events ADD COLUMN {name} {declaration}")
 
 
 def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -> tuple[int, int]:
@@ -968,13 +1001,17 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
                 if likely_duplicate(event, row[1], row[2], row[3], row[4], row[5])
             ), None)
         if not existing:
+            event_day = datetime.fromisoformat(event.start_at.replace("Z", "+00:00")).date()
+            candidate_days = tuple(
+                (event_day + timedelta(days=offset)).isoformat() for offset in (-1, 0, 1)
+            )
             nearby = connection.execute(
                 """
                 SELECT external_id,title,start_at,end_at,latitude,longitude,status
                 FROM events
-                WHERE substr(start_at,1,10)=? AND substr(end_at,1,10)=?
+                WHERE substr(start_at,1,10) IN (?,?,?)
                 """,
-                (event.start_at[:10], event.end_at[:10]),
+                candidate_days,
             ).fetchall()
             existing = next((
                 (row[0], row[6]) for row in nearby

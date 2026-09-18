@@ -619,6 +619,25 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
         self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
 
+    def test_persist_merges_same_date_only_event_with_inclusive_end_variation(self):
+        first_html = '''<script type="application/ld+json">{
+          "@type":"Event", "name":"Fête des végétaux",
+          "startDate":"2026-09-26", "endDate":"2026-09-27",
+          "location":{"name":"Micro-forêt","geo":{"latitude":43.88,"longitude":-0.52}}
+        }</script>'''
+        second_html = first_html.replace(
+            'Fête des végétaux', 'Végétaux en fête'
+        ).replace('2026-09-27', '2026-09-28')
+        first = extract_events(first_html, "A", "https://a.example/vegetaux")[0]
+        second = extract_events(second_html, "B", "https://b.example/vegetaux")[0]
+        database = sqlite3.connect(":memory:")
+        database.executescript(SCHEMA)
+
+        persist(database, [first, second], "2026-09-01T10:00:00+00:00")
+
+        self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+        self.assertEqual(2, database.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0])
+
     def test_specific_sub_event_is_not_merged_with_parent(self):
         parent_html = '''<script type="application/ld+json">{
           "@type":"Event", "name":"Fêtes de la Madeleine",
