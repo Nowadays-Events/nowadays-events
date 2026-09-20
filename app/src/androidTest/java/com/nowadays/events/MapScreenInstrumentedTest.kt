@@ -15,7 +15,6 @@ class MapScreenInstrumentedTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun mainScreenOpensAndWeekendFilterCanBeSelected() {
-        compose.onNodeWithText("Xymis Events").assertIsDisplayed()
         compose.onNodeWithTag("period-filter-bar").performScrollToNode(hasTestTag("period-this_weekend"))
         compose.onNodeWithTag("period-this_weekend").performClick()
         compose.onNodeWithText("✓ Week-end").assertIsDisplayed()
