@@ -34,7 +34,7 @@ fun EventEntity.toDomain(): Event = Event(
         else EventScheduleType.SINGLE
     },
     occurrenceStarts = occurrenceStarts.lineSequence().map(String::trim).filter(String::isNotBlank)
-        .mapNotNull { it.toLongOrNull()?.let(Instant::ofEpochMilli) }.distinct().sorted(),
+        .mapNotNull { it.toLongOrNull()?.let(Instant::ofEpochMilli) }.distinct().sorted().toList(),
     timePrecision = runCatching { EventTimePrecision.valueOf(timePrecision) }.getOrDefault(EventTimePrecision.EXACT),
     originalTimeText = originalTimeText,
 )
