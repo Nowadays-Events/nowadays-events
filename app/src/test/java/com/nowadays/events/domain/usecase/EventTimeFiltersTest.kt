@@ -37,9 +37,15 @@ class EventTimeFiltersTest {
     }
 
     @Test fun weekendStartsFridayAtSixPmLocalTime() {
+        val fridayBeforeWeekend = EventTimeFilters(
+            Clock.fixed(Instant.parse("2026-07-17T15:00:00Z"), zone),
+        )
         val before = event("2026-07-17T14:00:00Z", "2026-07-17T15:59:59Z")
         val during = event("2026-07-17T16:00:00Z", "2026-07-17T18:00:00Z")
-        assertEquals(listOf(during.id), filters.apply(listOf(before, during), TimeFilter.THIS_WEEKEND, zone).map { it.id })
+        assertEquals(
+            listOf(during.id),
+            fridayBeforeWeekend.apply(listOf(before, during), TimeFilter.THIS_WEEKEND, zone).map { it.id },
+        )
     }
 
     @Test fun weekendIncludesSaturdayEvent() {
