@@ -2,7 +2,7 @@ name: Check Android application
 
 on:
   push:
-    branches: [main, codex/validate-temporal-model]
+    branches: [main]
     paths:
       - ".github/workflows/android-check.yml"
       - "app/**"
