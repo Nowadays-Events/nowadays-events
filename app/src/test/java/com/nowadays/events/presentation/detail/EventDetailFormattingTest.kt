@@ -28,12 +28,11 @@ class EventDetailFormattingTest {
         )
         val label = eventDateLabel(recurring, formatter)
         assertEquals(true, label.startsWith("Prochaine date :"))
-        assertEquals(true, label.contains("Puis 3 autres dates"))
     }
 
     @Test fun `recurrence without future date is explicit`() {
         assertEquals(
-            "Aucune prochaine date confirmée",
+            "Aucune prochaine occurrence",
             eventDateLabel(
                 event("weekly", occurrenceCount = 4).copy(nextOccurrenceAt = null),
                 DateTimeFormatter.ISO_INSTANT,

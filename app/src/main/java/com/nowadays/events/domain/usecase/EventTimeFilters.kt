@@ -1,6 +1,7 @@
 package com.nowadays.events.domain.usecase
 
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventScheduleType
 import com.nowadays.events.domain.model.TimeFilter
 import java.time.Clock
 import java.time.DayOfWeek
@@ -40,7 +41,7 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
 
     fun apply(events: List<Event>, filter: TimeFilter, zoneId: ZoneId = ZoneId.systemDefault()): List<Event> {
         val window = window(filter, zoneId)
-        return events.filter { it.intersects(window) }.sortedBy(::relevantStart)
+        return events.mapNotNull { it.forWindow(window, clock.instant()) }.sortedBy(::relevantStart)
     }
 
     fun apply(
@@ -52,17 +53,25 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
         val start = startDate.atStartOfDay(zoneId).toInstant()
         val endExclusive = endDateInclusive.plusDays(1).atStartOfDay(zoneId).toInstant()
         val window = TimeWindow(start, endExclusive)
-        return events.filter { it.intersects(window) }.sortedBy(::relevantStart)
+        return events.mapNotNull { it.forWindow(window, clock.instant()) }.sortedBy(::relevantStart)
     }
 
     private fun relevantStart(event: Event): Instant =
-        if (event.occurrenceCount > 1) event.nextOccurrenceAt ?: Instant.MAX else event.startsAt
+        if (event.scheduleType == EventScheduleType.RECURRING) event.nextOccurrenceAt ?: Instant.MAX else event.startsAt
 
-    private fun Event.intersects(window: TimeWindow): Boolean {
-        if (occurrenceCount > 1) {
-            val occurrence = nextOccurrenceAt ?: return false
-            return occurrence >= window.start && (window.endExclusive == null || occurrence < window.endExclusive)
+    private fun Event.forWindow(window: TimeWindow, now: Instant): Event? {
+        if (endsAt < now && scheduleType != EventScheduleType.RECURRING) return null
+        if (scheduleType == EventScheduleType.RECURRING) {
+            val occurrence = (occurrenceStarts + listOfNotNull(nextOccurrenceAt))
+                .distinct().sorted()
+                .firstOrNull { candidate ->
+                    candidate >= now && candidate >= window.start &&
+                        (window.endExclusive == null || candidate < window.endExclusive)
+                } ?: return null
+            return copy(nextOccurrenceAt = occurrence)
         }
-        return endsAt >= window.start && (window.endExclusive == null || startsAt < window.endExclusive)
+        return takeIf {
+            endsAt >= window.start && (window.endExclusive == null || startsAt < window.endExclusive)
+        }
     }
 }

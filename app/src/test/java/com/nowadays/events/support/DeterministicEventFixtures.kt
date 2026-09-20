@@ -38,5 +38,7 @@ object DeterministicEventFixtures {
         sourceUrl, null, null, EventPrice.Free, base, DataOrigin.DEMO,
         status = status, occurrenceCount = occurrenceCount,
         nextOccurrenceAt = if (occurrenceCount > 1) base.plusSeconds(86400) else null,
+        scheduleType = if (occurrenceCount > 1) EventScheduleType.RECURRING else EventScheduleType.SINGLE,
+        occurrenceStarts = if (occurrenceCount > 1) listOf(base.plusSeconds(86400)) else emptyList(),
     )
 }

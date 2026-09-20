@@ -24,7 +24,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         self.assertTrue({
             "category", "price_type", "price_cents", "currency",
             "occurrence_count", "next_occurrence_at", "time_precision",
-            "original_time_text",
+            "original_time_text", "schedule_type", "occurrence_starts", "schedule_reason",
         }.issubset(columns))
         self.assertEqual("COMMUNITY", columns["category"][4].strip("'"))
         self.assertEqual("unknown", columns["price_type"][4].strip("'"))

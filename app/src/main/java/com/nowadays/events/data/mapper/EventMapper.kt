@@ -7,6 +7,7 @@ import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.model.EventStatus
 import com.nowadays.events.domain.model.EventTimePrecision
+import com.nowadays.events.domain.model.EventScheduleType
 import java.time.Instant
 
 fun EventEntity.toDomain(): Event = Event(
@@ -27,6 +28,13 @@ fun EventEntity.toDomain(): Event = Event(
     status = runCatching { EventStatus.valueOf(status) }.getOrDefault(EventStatus.ACTIVE),
     occurrenceCount = occurrenceCount,
     nextOccurrenceAt = nextOccurrenceAtEpochMillis?.let(Instant::ofEpochMilli),
+    scheduleType = runCatching { EventScheduleType.valueOf(scheduleType) }.getOrElse {
+        if (occurrenceCount > 1) EventScheduleType.RECURRING
+        else if (endsAtEpochMillis - startsAtEpochMillis >= 86_400_000L) EventScheduleType.CONTINUOUS
+        else EventScheduleType.SINGLE
+    },
+    occurrenceStarts = occurrenceStarts.lineSequence().map(String::trim).filter(String::isNotBlank)
+        .mapNotNull { it.toLongOrNull()?.let(Instant::ofEpochMilli) }.distinct().sorted(),
     timePrecision = runCatching { EventTimePrecision.valueOf(timePrecision) }.getOrDefault(EventTimePrecision.EXACT),
     originalTimeText = originalTimeText,
 )
@@ -48,6 +56,8 @@ fun Event.toEntity(): EventEntity = EventEntity(
     status = status.name,
     occurrenceCount = occurrenceCount,
     nextOccurrenceAtEpochMillis = nextOccurrenceAt?.toEpochMilli(),
+    scheduleType = scheduleType.name,
+    occurrenceStarts = occurrenceStarts.distinct().sorted().joinToString("\n") { it.toEpochMilli().toString() },
     timePrecision = timePrecision.name,
     originalTimeText = originalTimeText,
 )

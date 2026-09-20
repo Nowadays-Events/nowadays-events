@@ -4,6 +4,7 @@ import com.nowadays.events.domain.model.DataOrigin
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
+import com.nowadays.events.domain.model.EventScheduleType
 import com.nowadays.events.domain.model.TimeFilter
 import java.time.Clock
 import java.time.Instant
@@ -19,6 +20,7 @@ class EventTimeFiltersTest {
 
     @Test fun todayIncludesOverlappingEvent() {
         val event = event("2026-07-17T23:00:00Z", "2026-07-18T12:00:00Z")
+            .copy(scheduleType = EventScheduleType.CONTINUOUS)
         assertEquals(1, filters.apply(listOf(event), TimeFilter.TODAY, zone).size)
     }
 
@@ -52,7 +54,10 @@ class EventTimeFiltersTest {
 
     @Test fun recurringEventIsAbsentBetweenOccurrencesAndVisibleOnItsNextDay() {
         val nextWednesday = event("2026-07-01T08:00:00Z", "2026-09-30T09:00:00Z")
-            .copy(occurrenceCount = 12, nextOccurrenceAt = Instant.parse("2026-07-22T08:00:00Z"))
+            .copy(
+                occurrenceCount = 12, scheduleType = EventScheduleType.RECURRING,
+                occurrenceStarts = listOf(Instant.parse("2026-07-22T08:00:00Z")),
+            )
         assertEquals(0, filters.apply(listOf(nextWednesday), TimeFilter.TODAY, zone).size)
         val wednesdayClock = Clock.fixed(Instant.parse("2026-07-22T06:00:00Z"), zone)
         assertEquals(1, EventTimeFilters(wednesdayClock).apply(listOf(nextWednesday), TimeFilter.TODAY, zone).size)
@@ -60,7 +65,10 @@ class EventTimeFiltersTest {
 
     @Test fun recurringEventUsesNextOccurrenceForTomorrowSevenDaysWeekendAndCustomRange() {
         val saturday = event("2026-06-01T08:00:00Z", "2026-10-01T09:00:00Z")
-            .copy(occurrenceCount = 18, nextOccurrenceAt = Instant.parse("2026-07-19T08:00:00Z"))
+            .copy(
+                occurrenceCount = 18, scheduleType = EventScheduleType.RECURRING,
+                occurrenceStarts = listOf(Instant.parse("2026-07-19T08:00:00Z")),
+            )
         assertEquals(1, filters.apply(listOf(saturday), TimeFilter.TOMORROW, zone).size)
         assertEquals(1, filters.apply(listOf(saturday), TimeFilter.NEXT_7_DAYS, zone).size)
         assertEquals(1, filters.apply(listOf(saturday), TimeFilter.THIS_WEEKEND, zone).size)
@@ -69,7 +77,8 @@ class EventTimeFiltersTest {
     }
 
     @Test fun recurringEventAdvancesFromFirstOccurrenceAndRequiresAFutureDate() {
-        val recurring = event("2026-06-01T08:00:00Z", "2026-10-01T09:00:00Z").copy(occurrenceCount = 8)
+        val recurring = event("2026-06-01T08:00:00Z", "2026-10-01T09:00:00Z")
+            .copy(occurrenceCount = 8, scheduleType = EventScheduleType.RECURRING)
         assertEquals(0, filters.apply(listOf(recurring), TimeFilter.ALL_FUTURE, zone).size)
         val first = recurring.copy(nextOccurrenceAt = Instant.parse("2026-07-18T12:00:00Z"))
         val following = first.copy(nextOccurrenceAt = Instant.parse("2026-07-25T12:00:00Z"))
@@ -79,9 +88,26 @@ class EventTimeFiltersTest {
 
     @Test fun localTimezoneKeepsOccurrenceOnTheCorrectCalendarDay() {
         val justAfterMidnightParis = event("2026-06-01T08:00:00Z", "2026-10-01T09:00:00Z")
-            .copy(occurrenceCount = 3, nextOccurrenceAt = Instant.parse("2026-07-18T22:30:00Z"))
+            .copy(
+                occurrenceCount = 3, scheduleType = EventScheduleType.RECURRING,
+                occurrenceStarts = listOf(Instant.parse("2026-07-18T22:30:00Z")),
+            )
         assertEquals(0, filters.apply(listOf(justAfterMidnightParis), TimeFilter.TODAY, zone).size)
         assertEquals(1, filters.apply(listOf(justAfterMidnightParis), TimeFilter.TOMORROW, zone).size)
+    }
+
+    @Test fun recurringWindowSelectsTheRealOccurrenceInsideThatWindow() {
+        val recurring = event("2026-06-01T08:00:00Z", "2026-10-01T09:00:00Z").copy(
+            scheduleType = EventScheduleType.RECURRING,
+            occurrenceCount = 3,
+            nextOccurrenceAt = Instant.parse("2026-07-18T12:00:00Z"),
+            occurrenceStarts = listOf(
+                Instant.parse("2026-07-18T12:00:00Z"),
+                Instant.parse("2026-07-19T12:00:00Z"),
+            ),
+        )
+        val tomorrow = filters.apply(listOf(recurring), TimeFilter.TOMORROW, zone).single()
+        assertEquals(Instant.parse("2026-07-19T12:00:00Z"), tomorrow.nextOccurrenceAt)
     }
 
     private fun event(start: String, end: String) = Event(

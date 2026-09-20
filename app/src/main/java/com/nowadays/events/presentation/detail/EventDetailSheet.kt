@@ -80,7 +80,7 @@ fun EventDetailSheet(
                     Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (relatedEventCount > 0) Text("Événement principal · $relatedEventCount rendez-vous liés", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     event.organizer?.let { Text("Par $it", style = MaterialTheme.typography.bodySmall) }
-                    if (event.occurrenceCount > 1) Text(
+                    if (event.scheduleType == EventScheduleType.RECURRING) Text(
                         "${event.occurrenceCount} occurrences programmées",
                         style = MaterialTheme.typography.labelMedium,
                     )
@@ -241,16 +241,7 @@ internal fun normalizedAddress(value: String): String = value.trim()
     .replace(Regex("\\s{2,}"), " ")
 
 internal fun eventDateLabel(event: Event, formatter: DateTimeFormatter): String {
-    val next = event.nextOccurrenceAt
-    return if (event.occurrenceCount > 1 && next == null) {
-        "Aucune prochaine date confirmée"
-    } else if (event.occurrenceCount > 1 && next != null) {
-        val remaining = (event.occurrenceCount - 1).coerceAtLeast(0)
-        buildString {
-            append("Prochaine date : ${formatter.format(next)}")
-            if (remaining > 0) append("\nPuis $remaining autre${if (remaining > 1) "s" else ""} date${if (remaining > 1) "s" else ""}")
-        }
-    } else if (event.timePrecision != EventTimePrecision.EXACT) {
+    return if (event.scheduleType != EventScheduleType.SINGLE || event.timePrecision != EventTimePrecision.EXACT) {
         eventScheduleLabel(event)
     } else {
         "${formatter.format(event.startsAt)}\n${formatter.format(event.endsAt)}"

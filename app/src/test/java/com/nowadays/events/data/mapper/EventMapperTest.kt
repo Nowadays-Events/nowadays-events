@@ -5,6 +5,7 @@ import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.model.EventStatus
+import com.nowadays.events.domain.model.EventScheduleType
 import com.nowadays.events.domain.model.EventTimePrecision
 import java.time.Instant
 import org.junit.Assert.assertEquals
@@ -23,6 +24,11 @@ class EventMapperTest {
             status = EventStatus.CANCELLED,
             occurrenceCount = 8,
             nextOccurrenceAt = Instant.parse("2026-07-25T18:00:00Z"),
+            scheduleType = EventScheduleType.RECURRING,
+            occurrenceStarts = listOf(
+                Instant.parse("2026-07-25T18:00:00Z"),
+                Instant.parse("2026-08-01T18:00:00Z"),
+            ),
             timePrecision = EventTimePrecision.APPROXIMATE,
             originalTimeText = "À partir de 20 h",
         )

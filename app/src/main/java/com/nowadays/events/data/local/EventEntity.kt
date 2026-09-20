@@ -37,6 +37,8 @@ data class EventEntity(
     @ColumnInfo(defaultValue = "ACTIVE") val status: String = "ACTIVE",
     @ColumnInfo(name = "occurrence_count", defaultValue = "1") val occurrenceCount: Int = 1,
     @ColumnInfo(name = "next_occurrence_at") val nextOccurrenceAtEpochMillis: Long? = null,
+    @ColumnInfo(name = "schedule_type", defaultValue = "SINGLE") val scheduleType: String = "SINGLE",
+    @ColumnInfo(name = "occurrence_starts", defaultValue = "") val occurrenceStarts: String = "",
     @ColumnInfo(name = "time_precision", defaultValue = "EXACT") val timePrecision: String = "EXACT",
     @ColumnInfo(name = "original_time_text") val originalTimeText: String? = null,
 )

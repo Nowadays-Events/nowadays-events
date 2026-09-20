@@ -656,7 +656,8 @@ class NowadaysAgentTests(unittest.TestCase):
         database.execute(
             """INSERT INTO events SELECT ?,title,description,?,end_at,venue,address,latitude,
                       longitude,status,?,first_seen_at,last_seen_at,category,price_type,
-                      price_cents,currency,occurrence_count,next_occurrence_at,time_precision,
+                      price_cents,currency,occurrence_count,next_occurrence_at,schedule_type,
+                      occurrence_starts,schedule_reason,time_precision,
                       original_time_text FROM events WHERE external_id=?""",
             (second.external_id, second.start_at, second.fingerprint, first.external_id),
         )
@@ -761,6 +762,76 @@ class NowadaysAgentTests(unittest.TestCase):
             "status": "active", "occurrence_count": 4, "next_occurrence_at": None,
         }
         normalized = normalize_export_schedule(item, now)
+        self.assertIsNone(normalized["next_occurrence_at"])
+        self.assertFalse(should_export_event(normalized, now))
+
+    def test_schedule_types_are_explicit_and_traceable(self):
+        base = {
+            "@type": "Event", "name": "Test", "url": "https://example.org/test",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        }
+        single = extract_events(
+            f'<script type="application/ld+json">{json.dumps({**base, "startDate": "2026-09-20T18:00:00+02:00", "endDate": "2026-09-20T20:00:00+02:00"})}</script>',
+            "Test", base["url"],
+        )[0]
+        continuous = extract_events(
+            f'<script type="application/ld+json">{json.dumps({**base, "startDate": "2026-09-19", "endDate": "2026-09-21"})}</script>',
+            "Test", base["url"],
+        )[0]
+        recurring = extract_events(
+            f'<script type="application/ld+json">{json.dumps({**base, "startDate": "2026-01-01", "endDate": "2026-12-31", "occurrenceCount": 2, "occurrenceDates": ["2026-09-20T18:00:00+02:00", "2026-09-27T18:00:00+02:00"]})}</script>',
+            "Test", base["url"],
+        )[0]
+        self.assertEqual(("single", "single_date"), (single.schedule_type, single.schedule_reason))
+        self.assertEqual(("continuous", "date_span"), (continuous.schedule_type, continuous.schedule_reason))
+        self.assertEqual("recurring", recurring.schedule_type)
+        self.assertEqual(2, len(recurring.occurrence_starts))
+
+    def test_contradictory_weekday_in_title_never_rewrites_source_date(self):
+        payload = {
+            "@type": "Event", "name": "Mardi : concert",
+            "startDate": "2026-09-23T20:00:00+02:00",  # mercredi
+            "url": "https://example.org/weekday",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        }
+        event = extract_events(
+            f'<script type="application/ld+json">{json.dumps(payload)}</script>', "Test", payload["url"],
+        )[0]
+        self.assertEqual("2026-09-23T18:00:00+00:00", event.start_at)
+
+    def test_exact_midnight_is_not_extended_but_missing_time_is(self):
+        now = datetime.fromisoformat("2026-09-19T12:00:00+00:00")
+        exact = normalize_export_schedule({
+            "start_at": "2026-09-20T00:00:00+02:00", "end_at": "2026-09-20T00:00:00+02:00",
+            "time_precision": "exact", "schedule_type": "single",
+        }, now)
+        date_only = normalize_export_schedule({
+            "start_at": "2026-09-20T00:00:00+02:00", "end_at": "2026-09-20T00:00:00+02:00",
+            "time_precision": "date_only", "schedule_type": "single",
+        }, now)
+        self.assertEqual("2026-09-20T00:00:00+02:00", exact["end_at"])
+        self.assertEqual("2026-09-20T23:59:59+02:00", date_only["end_at"])
+
+    def test_recurrence_keeps_only_real_future_occurrences(self):
+        now = datetime.fromisoformat("2026-09-20T10:00:00+02:00")
+        normalized = normalize_export_schedule({
+            "start_at": "2026-01-01T00:00:00+01:00", "end_at": "2026-12-31T23:59:59+01:00",
+            "status": "active", "schedule_type": "recurring", "occurrence_count": 4,
+            "occurrence_starts": [
+                "2026-09-19T18:00:00+02:00", "2026-09-20T18:00:00+02:00",
+                "2026-09-21T18:00:00+02:00", "2026-09-26T18:00:00+02:00",
+            ],
+        }, now)
+        self.assertEqual("2026-09-20T18:00:00+02:00", normalized["next_occurrence_at"])
+        self.assertEqual(3, len(normalized["occurrence_starts"]))
+
+    def test_recurrence_without_future_occurrence_is_not_exported(self):
+        now = datetime.fromisoformat("2026-09-20T10:00:00+02:00")
+        normalized = normalize_export_schedule({
+            "start_at": "2026-01-01T00:00:00+01:00", "end_at": "2026-12-31T23:59:59+01:00",
+            "status": "active", "schedule_type": "recurring", "occurrence_count": 3,
+            "occurrence_starts": ["2026-09-19T18:00:00+02:00"],
+        }, now)
         self.assertIsNone(normalized["next_occurrence_at"])
         self.assertFalse(should_export_event(normalized, now))
 

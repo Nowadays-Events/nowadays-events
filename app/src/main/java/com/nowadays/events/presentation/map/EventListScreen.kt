@@ -182,7 +182,8 @@ private fun EventListCard(result: NearbyEvent, onClick: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SuggestionChip(onClick = {}, label = { Text(event.category.name.lowercase().replaceFirstChar(Char::uppercase)) })
                 SuggestionChip(onClick = {}, label = { Text(priceLabel(event.price)) })
-                if (event.occurrenceCount > 1) Text("Récurrent", style = MaterialTheme.typography.labelSmall)
+                if (event.scheduleType == EventScheduleType.RECURRING) Text("Récurrent", style = MaterialTheme.typography.labelSmall)
+                if (event.scheduleType == EventScheduleType.CONTINUOUS) Text("En continu", style = MaterialTheme.typography.labelSmall)
                 if (event.status == EventStatus.CANCELLED) Text("ANNULÉ", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
             }
         }

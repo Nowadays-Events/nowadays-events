@@ -77,6 +77,7 @@ import com.nowadays.events.domain.usecase.NearbyEvents
 import com.nowadays.events.map.EventMap
 import com.nowadays.events.map.EventMapController
 import com.nowadays.events.presentation.detail.EventDetailSheet
+import com.nowadays.events.presentation.eventScheduleLabel
 import org.maplibre.android.geometry.LatLng
 import java.time.Instant
 import java.time.LocalDate
@@ -440,7 +441,7 @@ private fun NearbyEventRow(
             Column(Modifier.weight(1f)) {
                 Text(event.title, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "${(if (event.occurrenceCount > 1) event.nextOccurrenceAt ?: event.startsAt else event.startsAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))} · ${event.venueName.ifBlank { event.address }}",
+                    "${eventScheduleLabel(event)} · ${event.venueName.ifBlank { event.address }}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

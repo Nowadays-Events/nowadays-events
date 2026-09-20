@@ -51,3 +51,25 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE events ADD COLUMN original_time_text TEXT")
     }
 }
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'SINGLE'")
+        db.execSQL("ALTER TABLE events ADD COLUMN occurrence_starts TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            """
+            UPDATE events SET schedule_type = CASE
+                WHEN occurrence_count > 1 OR next_occurrence_at IS NOT NULL THEN 'RECURRING'
+                WHEN ends_at - starts_at >= 86400000 THEN 'CONTINUOUS'
+                ELSE 'SINGLE'
+            END
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            UPDATE events SET occurrence_starts = CAST(next_occurrence_at AS TEXT)
+            WHERE schedule_type = 'RECURRING' AND next_occurrence_at IS NOT NULL
+            """.trimIndent(),
+        )
+    }
+}

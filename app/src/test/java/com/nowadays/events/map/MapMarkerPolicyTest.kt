@@ -4,6 +4,7 @@ import com.nowadays.events.domain.model.DataOrigin
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
+import com.nowadays.events.domain.model.EventScheduleType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,15 +38,16 @@ class MapMarkerPolicyTest {
         assertEquals(LocalDate.of(2026, 7, 1), MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 
-    @Test fun `recurring event keeps start date before it begins`() {
-        val recurring = event("2026-08-01T10:00:00Z", "2026-09-30T18:00:00Z").copy(occurrenceCount = 4)
-        assertEquals(LocalDate.of(2026, 8, 1), MapMarkerPolicy.displayDate(recurring, today, zone))
+    @Test fun `recurring event without next occurrence never uses historical start`() {
+        val recurring = event("2026-08-01T10:00:00Z", "2026-09-30T18:00:00Z")
+            .copy(occurrenceCount = 4, scheduleType = EventScheduleType.RECURRING)
+        assertEquals(LocalDate.MAX, MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 
     @Test fun `recurring event displays its next real occurrence`() {
         val next = Instant.parse("2026-08-02T16:00:00Z")
         val recurring = event("2026-07-01T10:00:00Z", "2026-08-31T18:00:00Z")
-            .copy(occurrenceCount = 12, nextOccurrenceAt = next)
+            .copy(occurrenceCount = 12, nextOccurrenceAt = next, scheduleType = EventScheduleType.RECURRING)
         assertEquals(LocalDate.of(2026, 8, 2), MapMarkerPolicy.displayDate(recurring, today, zone))
     }
 

@@ -98,6 +98,9 @@ class Event:
     currency: str = "EUR"
     occurrence_count: int = 1
     next_occurrence_at: str | None = None
+    schedule_type: str = "single"
+    occurrence_starts: tuple[str, ...] = ()
+    schedule_reason: str = "single_date"
     time_precision: str = "exact"
     original_time_text: str | None = None
 
@@ -297,6 +300,29 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     price_type, price_cents, currency = event_price(node)
     occurrence_count = max(1, int(node.get("occurrenceCount") or 1))
     next_occurrence_at = iso_datetime(node.get("nextOccurrenceDate")) or None
+    raw_occurrences = node.get("occurrenceDates") or []
+    if not isinstance(raw_occurrences, list):
+        raw_occurrences = [raw_occurrences]
+    occurrence_starts = tuple(sorted({
+        parsed for value in raw_occurrences if (parsed := iso_datetime(value))
+    } | ({next_occurrence_at} if next_occurrence_at else set())))
+    occurrence_count = max(occurrence_count, len(occurrence_starts), 1)
+    explicit_schedule = normalize(str(node.get("scheduleType") or "")).replace(" ", "_")
+    if explicit_schedule in {"single", "continuous", "recurring"}:
+        schedule_type = explicit_schedule
+        schedule_reason = str(node.get("scheduleReason") or "explicit_source")
+    elif occurrence_count > 1 or occurrence_starts or next_occurrence_at:
+        schedule_type = "recurring"
+        schedule_reason = "occurrences_provided"
+    elif (
+        datetime.fromisoformat(end_at) - datetime.fromisoformat(start_at)
+        >= timedelta(days=1)
+    ):
+        schedule_type = "continuous"
+        schedule_reason = "date_span"
+    else:
+        schedule_type = "single"
+        schedule_reason = "single_date"
     raw_start = str(node.get("startDate") or "").strip()
     explicit_precision = normalize(str(node.get("timePrecision") or "")).replace(" ", "_")
     time_precision = explicit_precision if explicit_precision in {"exact", "approximate", "date_only", "unknown"} else (
@@ -322,6 +348,9 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
         currency=currency,
         occurrence_count=occurrence_count,
         next_occurrence_at=next_occurrence_at,
+        schedule_type=schedule_type,
+        occurrence_starts=occurrence_starts,
+        schedule_reason=schedule_reason,
         time_precision=time_precision,
         original_time_text=first_text(node.get("originalTimeText")) or None,
     )
@@ -416,6 +445,11 @@ def extract_dax_events(body: str, source_name: str, page_url: str) -> list[Event
             "url": page_url,
             "occurrenceCount": len(periods),
             "nextOccurrenceDate": next_occurrence,
+            "occurrenceDates": future_starts if len(periods) > 1 else [],
+            "scheduleType": "recurring" if len(periods) > 1 else (
+                "continuous" if start_at[:10] != end_at[:10] else "single"
+            ),
+            "scheduleReason": "dax_periods",
             "keywords": " ".join(
                 localized_text(item.get("values") or item.get("value"))
                 for item in source.get("caracteristiques") or []
@@ -521,6 +555,9 @@ def enrich_recurring_events(
                 2 if explicit_occurrences and event.end_at[:10] != event.start_at[:10] else 1,
             ),
             next_occurrence_at=unique_occurrences[0].isoformat(),
+            schedule_type="recurring",
+            occurrence_starts=tuple(value.isoformat() for value in unique_occurrences),
+            schedule_reason="tourinsoft_schedule",
         )
         for event in events
     ]
@@ -733,9 +770,11 @@ def extract_biscarrosse_event(
     )
     intro = html_fragment_text(intro_match.group(1)) if intro_match else description
     now = datetime.now(ZoneInfo("Europe/Paris"))
-    next_occurrence = next((value for value in sorted(explicit_dates) if value.date() >= now.date()), None)
-    if not next_occurrence and start.date() <= now.date() <= end.date():
-        next_occurrence = now.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+    unique_dates = sorted(set(explicit_dates))
+    next_occurrence = next((value for value in unique_dates if value >= now), None)
+    schedule_type = "recurring" if len(unique_dates) > 1 else (
+        "continuous" if start.date() != end.date() else "single"
+    )
     node = {
         "@type": "Event",
         "name": html_fragment_text(title_match.group(1)),
@@ -743,8 +782,11 @@ def extract_biscarrosse_event(
         "startDate": start.isoformat(),
         "endDate": end.isoformat(),
         "url": page_url,
-        "occurrenceCount": max(len(set(explicit_dates)), 2 if start.date() != end.date() else 1),
+        "occurrenceCount": max(len(unique_dates), 1),
         "nextOccurrenceDate": next_occurrence.isoformat() if next_occurrence else None,
+        "occurrenceDates": [value.isoformat() for value in unique_dates],
+        "scheduleType": schedule_type,
+        "scheduleReason": "biscarrosse_explicit_dates" if unique_dates else "biscarrosse_date_span",
         "timePrecision": "exact" if time_match else "date_only",
         "originalTimeText": time_match.group(0).strip() if time_match else None,
         "location": {
@@ -950,6 +992,9 @@ CREATE TABLE IF NOT EXISTS events (
     ,currency TEXT NOT NULL DEFAULT 'EUR'
     ,occurrence_count INTEGER NOT NULL DEFAULT 1
     ,next_occurrence_at TEXT
+    ,schedule_type TEXT NOT NULL DEFAULT 'single'
+    ,occurrence_starts TEXT NOT NULL DEFAULT '[]'
+    ,schedule_reason TEXT NOT NULL DEFAULT 'legacy_default'
     ,time_precision TEXT NOT NULL DEFAULT 'exact'
     ,original_time_text TEXT
 );
@@ -973,6 +1018,9 @@ def ensure_optional_columns(connection: sqlite3.Connection) -> None:
         "currency": "TEXT NOT NULL DEFAULT 'EUR'",
         "occurrence_count": "INTEGER NOT NULL DEFAULT 1",
         "next_occurrence_at": "TEXT",
+        "schedule_type": "TEXT NOT NULL DEFAULT 'single'",
+        "occurrence_starts": "TEXT NOT NULL DEFAULT '[]'",
+        "schedule_reason": "TEXT NOT NULL DEFAULT 'legacy_default'",
         "time_precision": "TEXT NOT NULL DEFAULT 'exact'",
         "original_time_text": "TEXT",
     }
@@ -1028,8 +1076,9 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
             INSERT INTO events
             (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,status,
              fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
-             occurrence_count,next_occurrence_at,time_precision,original_time_text)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             occurrence_count,next_occurrence_at,schedule_type,occurrence_starts,schedule_reason,
+             time_precision,original_time_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(external_id) DO UPDATE SET
               title=excluded.title, description=excluded.description,
               start_at=excluded.start_at, end_at=excluded.end_at,
@@ -1039,6 +1088,8 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
               category=excluded.category, price_type=excluded.price_type,
               price_cents=excluded.price_cents, currency=excluded.currency,
               occurrence_count=excluded.occurrence_count, next_occurrence_at=excluded.next_occurrence_at,
+              schedule_type=excluded.schedule_type, occurrence_starts=excluded.occurrence_starts,
+              schedule_reason=excluded.schedule_reason,
               time_precision=excluded.time_precision, original_time_text=excluded.original_time_text,
               last_seen_at=excluded.last_seen_at
             """,
@@ -1046,7 +1097,9 @@ def persist(connection: sqlite3.Connection, events: Iterable[Event], now: str) -
                 chosen_id, event.title, event.description, event.start_at, event.end_at,
                 event.venue, event.address, event.latitude, event.longitude, event.status,
                 event.fingerprint, now, now, event.category, event.price_type, event.price_cents, event.currency,
-                event.occurrence_count, event.next_occurrence_at, event.time_precision, event.original_time_text,
+                event.occurrence_count, event.next_occurrence_at,
+                event.schedule_type, json.dumps(event.occurrence_starts), event.schedule_reason,
+                event.time_precision, event.original_time_text,
             ),
         )
         # Répare les anciennes fusions géographiquement erronées : une URL de
@@ -1141,8 +1194,9 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
             INSERT OR IGNORE INTO events
             (external_id,title,description,start_at,end_at,venue,address,latitude,longitude,
              status,fingerprint,first_seen_at,last_seen_at,category,price_type,price_cents,currency,
-             occurrence_count,next_occurrence_at,time_precision,original_time_text)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             occurrence_count,next_occurrence_at,schedule_type,occurrence_starts,schedule_reason,
+             time_precision,original_time_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 item["external_id"], item["title"], item.get("description", ""),
@@ -1154,6 +1208,9 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
                 item.get("category", "COMMUNITY"), item.get("price_type", "unknown"),
                 item.get("price_cents"), item.get("currency", "EUR"),
                 item.get("occurrence_count", 1), item.get("next_occurrence_at"),
+                legacy_schedule_type(item), json.dumps(item.get("occurrence_starts") or (
+                    [item["next_occurrence_at"]] if item.get("next_occurrence_at") else []
+                )), item.get("schedule_reason", "legacy_feed"),
                 item.get("time_precision", "exact"), item.get("original_time_text"),
             ),
         )
@@ -1198,6 +1255,7 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
         # un événement absent depuis une semaine ne doit plus encombrer la liste.
         if last_seen < now - timedelta(days=7):
             return False
+    schedule_type = legacy_schedule_type(item)
     next_occurrence = item.get("next_occurrence_at")
     if next_occurrence:
         try:
@@ -1208,12 +1266,30 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
                 return True
         except ValueError:
             pass
-    try:
-        if int(item.get("occurrence_count") or 1) > 1:
-            return False
-    except (TypeError, ValueError):
+    if schedule_type == "recurring":
         return False
     return end.date() >= now.date()
+
+
+def legacy_schedule_type(item: dict[str, Any]) -> str:
+    """Déduit un type uniquement quand un ancien flux ne le fournit pas."""
+    explicit = str(item.get("schedule_type") or "").lower()
+    if explicit in {"single", "continuous", "recurring"}:
+        return explicit
+    try:
+        count = int(item.get("occurrence_count") or 1)
+    except (TypeError, ValueError):
+        count = 1
+    if count > 1 or item.get("next_occurrence_at") or item.get("occurrence_starts"):
+        return "recurring"
+    try:
+        start = datetime.fromisoformat(str(item.get("start_at") or "").replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(item.get("end_at") or "").replace("Z", "+00:00"))
+        if end - start >= timedelta(days=1):
+            return "continuous"
+    except ValueError:
+        pass
+    return "single"
 
 
 def normalize_export_schedule(item: dict[str, Any], reference: datetime) -> dict[str, Any]:
@@ -1230,25 +1306,38 @@ def normalize_export_schedule(item: dict[str, Any], reference: datetime) -> dict
         end = end.replace(tzinfo=timezone.utc)
     # Les sources touristiques utilisent 00:00 quand aucun horaire n'est
     # fourni. La manifestation reste alors valable pendant toute la journée.
-    if end.hour == 0 and end.minute == 0 and end.second == 0:
+    if (
+        item.get("time_precision") != "exact"
+        and end.hour == 0 and end.minute == 0 and end.second == 0
+    ):
         end = end + timedelta(days=1) - timedelta(seconds=1)
         normalized_item["end_at"] = end.isoformat()
 
-    try:
-        occurrence_count = int(item.get("occurrence_count") or 1)
-    except (TypeError, ValueError):
-        occurrence_count = 1
-    if occurrence_count <= 1 or item.get("status", "active") not in {"active", "unverified"}:
+    normalized_item["schedule_type"] = legacy_schedule_type(item)
+    if normalized_item["schedule_type"] != "recurring" or item.get("status", "active") not in {"active", "unverified"}:
         return normalized_item
-    try:
-        next_occurrence = datetime.fromisoformat(
-            str(item.get("next_occurrence_at") or "").replace("Z", "+00:00")
-        )
-        if next_occurrence.tzinfo is None:
-            next_occurrence = next_occurrence.replace(tzinfo=timezone.utc)
-    except ValueError:
-        next_occurrence = None
-    if next_occurrence is None or next_occurrence < reference or next_occurrence > end:
+    valid_occurrences: list[tuple[datetime, str]] = []
+    raw_occurrences = item.get("occurrence_starts") or []
+    if isinstance(raw_occurrences, str):
+        try:
+            raw_occurrences = json.loads(raw_occurrences)
+        except json.JSONDecodeError:
+            raw_occurrences = []
+    for raw in [*raw_occurrences, item.get("next_occurrence_at")]:
+        if not raw:
+            continue
+        try:
+            occurrence = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if occurrence.tzinfo is None:
+                occurrence = occurrence.replace(tzinfo=timezone.utc)
+            if reference <= occurrence <= end:
+                valid_occurrences.append((occurrence, occurrence.isoformat()))
+        except ValueError:
+            continue
+    occurrence_starts = [value for _, value in sorted(set(valid_occurrences))]
+    normalized_item["occurrence_starts"] = occurrence_starts
+    normalized_item["next_occurrence_at"] = occurrence_starts[0] if occurrence_starts else None
+    if not occurrence_starts:
         # Ne jamais transformer une période récurrente en présence quotidienne.
         # Le parseur doit fournir une occurrence réelle ; sinon l'événement reste
         # en base mais n'est pas publié comme rendez-vous actif.
@@ -1275,6 +1364,10 @@ def export_feed(connection: sqlite3.Connection, output: Path, now: datetime | No
     for row in rows:
         item = dict(zip(columns, row))
         item["source_urls"] = item["source_urls"].splitlines()
+        try:
+            item["occurrence_starts"] = json.loads(item.get("occurrence_starts") or "[]")
+        except json.JSONDecodeError:
+            item["occurrence_starts"] = []
         item = normalize_export_schedule(item, reference)
         if should_export_event(item, reference):
             payload.append(item)

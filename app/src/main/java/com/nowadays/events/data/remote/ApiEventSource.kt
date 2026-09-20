@@ -7,6 +7,7 @@ import com.nowadays.events.domain.model.EventCategory
 import com.nowadays.events.domain.model.EventPrice
 import com.nowadays.events.domain.model.EventStatus
 import com.nowadays.events.domain.model.EventTimePrecision
+import com.nowadays.events.domain.model.EventScheduleType
 import java.time.ZoneId
 import java.net.HttpURLConnection
 import java.net.URL
@@ -39,6 +40,17 @@ class ApiEventSource @Inject constructor() : EventSource {
                     val end = item.instant("end_at") ?: start
                     val title = item.optString("title")
                     if (title.isBlank()) continue
+                    val occurrenceStarts = item.optJSONArray("occurrence_starts")?.let { values ->
+                        buildList {
+                            for (valueIndex in 0 until values.length()) {
+                                values.optString(valueIndex).takeIf(String::isNotBlank)
+                                    ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                                    ?.let(::add)
+                            }
+                        }
+                    }.orEmpty().distinct().sorted()
+                    val occurrenceCount = item.optInt("occurrence_count", 1).coerceAtLeast(1)
+                    val nextOccurrence = item.instant("next_occurrence_at")
                     val sourceUrls = item.optJSONArray("source_urls")?.let { urls ->
                         buildList {
                             for (urlIndex in 0 until urls.length()) {
@@ -81,8 +93,10 @@ class ApiEventSource @Inject constructor() : EventSource {
                                 "unverified" -> EventStatus.UNVERIFIED
                                 else -> EventStatus.ACTIVE
                             },
-                            occurrenceCount = item.optInt("occurrence_count", 1).coerceAtLeast(1),
-                            nextOccurrenceAt = item.instant("next_occurrence_at"),
+                            occurrenceCount = occurrenceCount,
+                            nextOccurrenceAt = nextOccurrence,
+                            scheduleType = item.scheduleType(start, end, occurrenceCount, nextOccurrence),
+                            occurrenceStarts = occurrenceStarts.ifEmpty { listOfNotNull(nextOccurrence) },
                             timePrecision = item.timePrecision(start),
                             originalTimeText = item.optString("original_time_text").ifBlank { null },
                         ),
@@ -106,6 +120,21 @@ private fun JSONObject.timePrecision(start: Instant): EventTimePrecision {
     // Legacy feeds encoded a date without a known time as local midnight.
     return if (start.atZone(ZoneId.of("Europe/Paris")).toLocalTime() == java.time.LocalTime.MIDNIGHT)
         EventTimePrecision.DATE_ONLY else EventTimePrecision.EXACT
+}
+
+private fun JSONObject.scheduleType(
+    start: Instant,
+    end: Instant,
+    occurrenceCount: Int,
+    nextOccurrence: Instant?,
+): EventScheduleType {
+    optString("schedule_type").uppercase().takeIf(String::isNotBlank)?.let { explicit ->
+        runCatching { EventScheduleType.valueOf(explicit) }.getOrNull()?.let { return it }
+    }
+    // Compatibilité avec les flux antérieurs au contrat temporel explicite.
+    if (occurrenceCount > 1 || nextOccurrence != null) return EventScheduleType.RECURRING
+    return if (end.epochSecond - start.epochSecond >= 86_400L) EventScheduleType.CONTINUOUS
+    else EventScheduleType.SINGLE
 }
 
 private fun String.toCategory(): EventCategory =

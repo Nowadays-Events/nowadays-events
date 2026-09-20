@@ -27,4 +27,17 @@ class MapScreenInstrumentedTest {
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("✓ Week-end").assertIsDisplayed()
     }
+
+    @Test fun everyPresetTemporalFilterCanBeSelected() {
+        listOf(
+            "period-today" to "✓ Aujourd’hui",
+            "period-tomorrow" to "✓ Demain",
+            "period-next_7_days" to "✓ 7 jours",
+            "period-this_weekend" to "✓ Week-end",
+        ).forEach { (tag, selectedText) ->
+            compose.onNodeWithTag("period-filter-bar").performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).performClick()
+            compose.onNodeWithText(selectedText).assertIsDisplayed()
+        }
+    }
 }
