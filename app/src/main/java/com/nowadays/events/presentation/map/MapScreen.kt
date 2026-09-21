@@ -93,6 +93,7 @@ fun MapScreen(
     focusLatitude: Double? = null,
     focusLongitude: Double? = null,
     focusEventId: String? = null,
+    openFocusedEventDetail: Boolean = false,
     onFocusHandled: () -> Unit = {},
     viewModel: MapViewModel = hiltViewModel(),
 ) {
@@ -142,7 +143,9 @@ fun MapScreen(
             focusApplied = true
             viewModel.selectFilter(TimeFilter.ALL_FUTURE)
             controller.recenter(LatLng(focusLatitude, focusLongitude), 14.0)
-            focusEventId?.takeIf { id -> state.nearbyEvents.any { it.id == id } }?.let(viewModel::openNearbyEvent)
+            focusEventId?.takeIf { id -> state.nearbyEvents.any { it.id == id } }?.let { id ->
+                if (openFocusedEventDetail) viewModel.openNearbyEvent(id) else viewModel.highlightEvent(id)
+            }
             onFocusHandled()
         }
     }
@@ -189,7 +192,7 @@ fun MapScreen(
                 childCounts = state.childCounts,
                 expandedMainEvent = state.expandedMainEvent,
                 expandedClusterEventIds = state.expandedClusterEventIds,
-                selectedEventId = state.selectedEvent?.id,
+                selectedEventId = state.selectedEvent?.id ?: state.highlightedEventId,
                 onEventSelected = viewModel::selectEvent,
                 controller = controller,
                 modifier = Modifier.fillMaxSize(),
@@ -214,7 +217,7 @@ fun MapScreen(
             SmallFloatingActionButton(
                 onClick = onBackToList,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 76.dp).testTag("back-to-list"),
-            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour à la liste") }
+            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour") }
             FilterBar(
                 selected = state.selectedFilter,
                 customStartDate = state.customStartDate,

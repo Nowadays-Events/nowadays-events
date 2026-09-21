@@ -17,6 +17,7 @@ data class MapUiState(
     val events: List<Event> = emptyList(),
     val nearbyEvents: List<Event> = emptyList(),
     val selectedEvent: Event? = null,
+    val highlightedEventId: String? = null,
     val relatedEvents: List<Event> = emptyList(),
     val selectedIsMainEvent: Boolean = false,
     val mainEventIds: Set<String> = emptySet(),

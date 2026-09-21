@@ -37,12 +37,17 @@ class MapViewModel @Inject constructor(
             ?: TimeFilter.TODAY,
     )
     private val selectedEventId = MutableStateFlow<String?>(null)
+    private val highlightedEventId = MutableStateFlow<String?>(null)
     private val expandedMainEventId = MutableStateFlow<String?>(null)
-    private val customDateRange = MutableStateFlow<Pair<LocalDate, LocalDate>?>(null)
+    private val customDateRange = MutableStateFlow(
+        savedStateHandle.get<String>("custom_start")?.let(LocalDate::parse)?.let { start ->
+            start to (savedStateHandle.get<String>("custom_end")?.let(LocalDate::parse) ?: start)
+        },
+    )
     private val expandedClusterEventIds = MutableStateFlow<Set<String>>(emptySet())
-    private val searchQuery = MutableStateFlow("")
-    private val selectedCategory = MutableStateFlow<EventCategory?>(null)
-    private val priceFilter = MutableStateFlow(EventPriceFilter.ALL)
+    private val searchQuery = MutableStateFlow(savedStateHandle.get<String>("search_query").orEmpty())
+    private val selectedCategory = MutableStateFlow(savedStateHandle.get<String>("category")?.let { runCatching { EventCategory.valueOf(it) }.getOrNull() })
+    private val priceFilter = MutableStateFlow(savedStateHandle.get<String>("price_filter")?.let { runCatching { EventPriceFilter.valueOf(it) }.getOrNull() } ?: EventPriceFilter.ALL)
     private data class FilterSelection(
         val filter: TimeFilter,
         val range: Pair<LocalDate, LocalDate>?,
@@ -62,8 +67,8 @@ class MapViewModel @Inject constructor(
         eventId?.let(repository::observeAttendance) ?: flowOf(AttendanceResponse.NONE)
     }
 
-    private data class Selection(val eventId: String?, val attendance: AttendanceResponse, val expandedMainId: String?)
-    private val selection = combine(selectedEventId, attendance, expandedMainEventId, ::Selection)
+    private data class Selection(val eventId: String?, val attendance: AttendanceResponse, val expandedMainId: String?, val highlightedId: String?)
+    private val selection = combine(selectedEventId, attendance, expandedMainEventId, highlightedEventId, ::Selection)
 
     val uiState = combine(repository.observeEvents(), filterSelection, contentFilters, selection) { events, filterSelection, content, selection ->
         val filter = filterSelection.filter
@@ -103,6 +108,7 @@ class MapViewModel @Inject constructor(
             events = visible,
             nearbyEvents = filters.apply(events, TimeFilter.ALL_FUTURE),
             selectedEvent = selected,
+            highlightedEventId = selection.highlightedId,
             relatedEvents = related,
             selectedIsMainEvent = selected != null && selectedFamily?.main?.id == selected.id && selectedFamily.children.isNotEmpty(),
             mainEventIds = families.filter { it.children.isNotEmpty() }.map { it.main.id }.toSet(),
@@ -130,6 +136,8 @@ class MapViewModel @Inject constructor(
 
     fun selectCustomRange(start: LocalDate, endInclusive: LocalDate) {
         customDateRange.value = start to endInclusive
+        savedStateHandle["custom_start"] = start.toString()
+        savedStateHandle["custom_end"] = endInclusive.toString()
         selectedFilter.value = TimeFilter.CUSTOM
         savedStateHandle["selected_filter"] = TimeFilter.CUSTOM.name
         expandedMainEventId.value = null
@@ -138,21 +146,30 @@ class MapViewModel @Inject constructor(
     }
 
     fun expandCluster(eventIds: Set<String>) { expandedClusterEventIds.value = eventIds }
-    fun setSearchQuery(value: String) { searchQuery.value = value }
-    fun selectCategory(category: EventCategory?) { selectedCategory.value = category }
-    fun selectPriceFilter(filter: EventPriceFilter) { priceFilter.value = filter }
+    fun setSearchQuery(value: String) { searchQuery.value = value; savedStateHandle["search_query"] = value }
+    fun selectCategory(category: EventCategory?) { selectedCategory.value = category; savedStateHandle["category"] = category?.name }
+    fun selectPriceFilter(filter: EventPriceFilter) { priceFilter.value = filter; savedStateHandle["price_filter"] = filter.name }
     fun clearContentFilters() {
         searchQuery.value = ""
         selectedCategory.value = null
         priceFilter.value = EventPriceFilter.ALL
+        savedStateHandle["search_query"] = ""
+        savedStateHandle.set<String?>("category", null)
+        savedStateHandle["price_filter"] = EventPriceFilter.ALL.name
     }
     fun clearMapSelection() {
         selectedEventId.value = null
+        highlightedEventId.value = null
         expandedClusterEventIds.value = emptySet()
     }
 
     fun selectEvent(id: String) {
+        highlightedEventId.value = null
         selectedEventId.value = id
+    }
+    fun highlightEvent(id: String) {
+        selectedEventId.value = null
+        highlightedEventId.value = id
     }
     fun openNearbyEvent(id: String) {
         selectedFilter.value = TimeFilter.ALL_FUTURE

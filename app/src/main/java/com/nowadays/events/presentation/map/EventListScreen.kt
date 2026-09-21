@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.nowadays.events.presentation.map
 
 import android.Manifest
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
@@ -40,7 +43,8 @@ private val saintPierreDuMont = ReferencePlace("Saint-Pierre-du-Mont", 43.8849, 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventListScreen(
-    onShowMap: (Event?) -> Unit,
+    onShowMap: () -> Unit,
+    onOpenEvent: (Event) -> Unit,
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -49,16 +53,19 @@ fun EventListScreen(
     var reference by remember {
         mutableStateOf(if (preferences.getString("reference", "mont-de-marsan") == "saint-pierre") saintPierreDuMont else montDeMarsan)
     }
-    var customLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
-    var usingMyPosition by remember { mutableStateOf(false) }
+    var customLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var customLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    val customLocation = if (customLatitude != null && customLongitude != null) customLatitude!! to customLongitude!! else null
+    var usingMyPosition by rememberSaveable { mutableStateOf(false) }
     var locationUnavailable by remember { mutableStateOf(false) }
-    var radiusKm by remember { mutableIntStateOf(preferences.getInt("radius", 30)) }
-    var showCalendar by remember { mutableStateOf(false) }
+    var radiusKm by rememberSaveable { mutableIntStateOf(preferences.getInt("radius", 30)) }
+    var showCalendar by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants.values.any { it }) {
-            customLocation = lastListLocation(context)
-            usingMyPosition = customLocation != null
-            locationUnavailable = customLocation == null
+            lastListLocation(context).also { customLatitude = it?.first; customLongitude = it?.second }
+            usingMyPosition = customLatitude != null
+            locationUnavailable = customLatitude == null
         } else locationUnavailable = true
     }
     val coordinates = customLocation ?: (reference.latitude to reference.longitude)
@@ -82,7 +89,7 @@ fun EventListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onShowMap(null) }, modifier = Modifier.testTag("open-map")) {
+                    IconButton(onClick = onShowMap, modifier = Modifier.testTag("open-map")) {
                         Icon(Icons.Default.Map, contentDescription = "Afficher la carte")
                     }
                 },
@@ -95,7 +102,7 @@ fun EventListScreen(
                 item {
                     AssistChip(
                         onClick = {
-                            usingMyPosition = false; customLocation = null; reference = montDeMarsan
+                            usingMyPosition = false; customLatitude = null; customLongitude = null; reference = montDeMarsan
                             preferences.edit().putString("reference", "mont-de-marsan").apply()
                         },
                         label = { Text(if (!usingMyPosition && reference == montDeMarsan) "✓ Mont-de-Marsan" else "Mont-de-Marsan") },
@@ -105,7 +112,7 @@ fun EventListScreen(
                 item {
                     AssistChip(
                         onClick = {
-                            usingMyPosition = false; customLocation = null; reference = saintPierreDuMont
+                            usingMyPosition = false; customLatitude = null; customLongitude = null; reference = saintPierreDuMont
                             preferences.edit().putString("reference", "saint-pierre").apply()
                         },
                         label = { Text(if (!usingMyPosition && reference == saintPierreDuMont) "✓ Saint-Pierre" else "Saint-Pierre") },
@@ -117,8 +124,9 @@ fun EventListScreen(
                         onClick = {
                             locationUnavailable = false
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                                customLocation = lastListLocation(context); usingMyPosition = customLocation != null
-                                locationUnavailable = customLocation == null
+                                lastListLocation(context).also { customLatitude = it?.first; customLongitude = it?.second }
+                                usingMyPosition = customLatitude != null
+                                locationUnavailable = customLatitude == null
                             } else permission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
                         },
                         leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
@@ -149,10 +157,11 @@ fun EventListScreen(
                 }
                 else -> LazyColumn(
                     Modifier.fillMaxSize().testTag("event-list"),
+                    state = listState,
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(results, key = { it.event.id }) { result -> EventListCard(result) { onShowMap(result.event) } }
+                    items(results, key = { it.event.id }) { result -> EventListCard(result) { onOpenEvent(result.event) } }
                 }
             }
         }
@@ -172,25 +181,30 @@ private fun EventListCard(result: NearbyEvent, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).testTag("event-card-${event.id}"),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(eventScheduleLabel(event), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                Text(distanceLabel(result.distanceKm), style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                Text(eventScheduleLabel(event), modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text(distanceLabel(result.distanceKm), style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false, modifier = Modifier.testTag("event-distance-${event.id}"))
             }
             Text(event.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(event.venueName.ifBlank { event.address }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(classification.summary(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                SuggestionChip(onClick = {}, label = { Text(event.category.name.lowercase().replaceFirstChar(Char::uppercase)) })
-                SuggestionChip(onClick = {}, label = { Text(priceLabel(event.price)) })
-                if (event.scheduleType == EventScheduleType.RECURRING) Text("Récurrent", style = MaterialTheme.typography.labelSmall)
-                if (event.scheduleType == EventScheduleType.CONTINUOUS) Text("En continu", style = MaterialTheme.typography.labelSmall)
-                if (event.status == EventStatus.CANCELLED) Text("ANNULÉ", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SuggestionChip(onClick = {}, label = { Text(categoryLabel(event.category)) }, modifier = Modifier.heightIn(min = 48.dp))
+                if (event.price !is EventPrice.Unknown) SuggestionChip(onClick = {}, label = { Text(priceLabel(event.price)) }, modifier = Modifier.heightIn(min = 48.dp))
+                if (event.price is EventPrice.Unknown) Text("Tarif non renseigné", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+                if (event.scheduleType == EventScheduleType.RECURRING) AssistChip({}, { Text("Récurrent") }, modifier = Modifier.heightIn(min = 48.dp))
+                if (event.scheduleType == EventScheduleType.CONTINUOUS) AssistChip({}, { Text("En continu") }, modifier = Modifier.heightIn(min = 48.dp))
+                if (event.status == EventStatus.CANCELLED) AssistChip({}, { Text("ANNULÉ") }, colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error), modifier = Modifier.heightIn(min = 48.dp).testTag("event-cancelled-${event.id}"))
             }
         }
     }
 }
 
 private fun distanceLabel(distanceKm: Double) = if (distanceKm < 10) "%.1f km".format(distanceKm) else "%.0f km".format(distanceKm)
+private fun categoryLabel(category: EventCategory) = when (category) {
+    EventCategory.CULTURE -> "Culture"; EventCategory.MUSIC -> "Musique"; EventCategory.SPORT -> "Sport"
+    EventCategory.FOOD -> "Gastronomie"; EventCategory.FAMILY -> "Famille"; EventCategory.COMMUNITY -> "Vie locale"; EventCategory.TECHNOLOGY -> "Technologie"
+}
 private fun priceLabel(price: EventPrice) = when (price) {
     EventPrice.Free -> "Gratuit"
     EventPrice.Unknown -> "Tarif inconnu"
