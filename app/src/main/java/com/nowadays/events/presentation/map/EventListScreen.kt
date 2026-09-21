@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +56,9 @@ fun EventListScreen(
     }
     var customLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
     var customLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
-    val customLocation = if (customLatitude != null && customLongitude != null) customLatitude!! to customLongitude!! else null
+    val savedLatitude = customLatitude
+    val savedLongitude = customLongitude
+    val customLocation: Pair<Double, Double>? = if (savedLatitude != null && savedLongitude != null) savedLatitude to savedLongitude else null
     var usingMyPosition by rememberSaveable { mutableStateOf(false) }
     var locationUnavailable by remember { mutableStateOf(false) }
     var radiusKm by rememberSaveable { mutableIntStateOf(preferences.getInt("radius", 30)) }
