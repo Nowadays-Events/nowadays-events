@@ -11,7 +11,7 @@ import javax.inject.Inject
 class FakeRemoteEventSource @Inject constructor(private val clock: Clock) : EventSource {
     override val name = "fake-remote"
 
-    override suspend fun fetchEvents(updatedSince: java.time.Instant?): List<Event> {
+    override suspend fun fetchSnapshot(): RemoteEventSnapshot {
         val start = clock.instant().plus(Duration.ofDays(14))
         val event = Event(
             id = "fake-remote-event-1",
@@ -33,7 +33,6 @@ class FakeRemoteEventSource @Inject constructor(private val clock: Clock) : Even
             origin = DataOrigin.AUTOMATIC,
             isFictional = true,
         )
-        return if (updatedSince == null || event.updatedAt > updatedSince) listOf(event) else emptyList()
+        return RemoteEventSnapshot(listOf(event), clock.instant(), "ok", 1)
     }
 }
-

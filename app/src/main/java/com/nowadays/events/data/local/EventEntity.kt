@@ -41,4 +41,6 @@ data class EventEntity(
     @ColumnInfo(name = "occurrence_starts", defaultValue = "") val occurrenceStarts: String = "",
     @ColumnInfo(name = "time_precision", defaultValue = "EXACT") val timePrecision: String = "EXACT",
     @ColumnInfo(name = "original_time_text") val originalTimeText: String? = null,
+    @ColumnInfo(name = "missed_snapshots", defaultValue = "0") val missedSnapshots: Int = 0,
+    @ColumnInfo(name = "is_remote_visible", defaultValue = "1") val isRemoteVisible: Boolean = true,
 )

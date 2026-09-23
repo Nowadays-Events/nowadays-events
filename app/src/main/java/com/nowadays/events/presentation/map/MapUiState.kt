@@ -5,12 +5,15 @@ import com.nowadays.events.domain.model.AttendanceResponse
 import com.nowadays.events.domain.model.TimeFilter
 import java.time.LocalDate
 import java.time.Instant
+import com.nowadays.events.domain.model.SyncState
 
 data class MapUiState(
     val selectedFilter: TimeFilter = TimeFilter.TODAY,
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
     val dataUpdatedAt: Instant? = null,
+    val syncState: SyncState = SyncState(),
+    val syncDataPotentiallyStale: Boolean = false,
     val searchQuery: String = "",
     val selectedCategory: com.nowadays.events.domain.model.EventCategory? = null,
     val priceFilter: EventPriceFilter = EventPriceFilter.ALL,

@@ -73,3 +73,23 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         )
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE events ADD COLUMN missed_snapshots INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE events ADD COLUMN is_remote_visible INTEGER NOT NULL DEFAULT 1")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS sync_state (
+                id INTEGER NOT NULL PRIMARY KEY,
+                status TEXT NOT NULL,
+                lastAttemptAt INTEGER,
+                lastSuccessAt INTEGER,
+                receivedCount INTEGER NOT NULL,
+                lastSuccessfulCount INTEGER NOT NULL,
+                technicalReason TEXT
+            )
+            """.trimIndent(),
+        )
+    }
+}

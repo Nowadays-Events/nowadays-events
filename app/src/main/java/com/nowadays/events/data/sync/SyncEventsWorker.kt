@@ -14,6 +14,5 @@ class SyncEventsWorker @AssistedInject constructor(
     private val synchronizer: EventSynchronizer,
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = runCatching { synchronizer.synchronize() }
-        .fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+        .fold(onSuccess = { if (it.successful) Result.success() else Result.retry() }, onFailure = { Result.retry() })
 }
-

@@ -12,6 +12,7 @@ import com.nowadays.events.domain.repository.EventRepository
 import com.nowadays.events.domain.usecase.EventTimeFilters
 import com.nowadays.events.domain.usecase.EventFamilyGrouper
 import com.nowadays.events.map.MapSelectionPolicy
+import com.nowadays.events.data.sync.EventSynchronizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.Clock
 
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,6 +32,8 @@ class MapViewModel @Inject constructor(
     private val repository: EventRepository,
     private val filters: EventTimeFilters,
     private val savedStateHandle: SavedStateHandle,
+    private val synchronizer: EventSynchronizer,
+    private val clock: Clock,
 ) : ViewModel() {
     private val selectedFilter = MutableStateFlow(
         savedStateHandle.get<String>("selected_filter")
@@ -70,7 +74,7 @@ class MapViewModel @Inject constructor(
     private data class Selection(val eventId: String?, val attendance: AttendanceResponse, val expandedMainId: String?, val highlightedId: String?)
     private val selection = combine(selectedEventId, attendance, expandedMainEventId, highlightedEventId, ::Selection)
 
-    val uiState = combine(repository.observeEvents(), filterSelection, contentFilters, selection) { events, filterSelection, content, selection ->
+    val uiState = combine(repository.observeEvents(), repository.observeSyncState(), filterSelection, contentFilters, selection) { events, syncState, filterSelection, content, selection ->
         val filter = filterSelection.filter
         val customRange = filterSelection.range
         val dateFiltered = if (filter == TimeFilter.CUSTOM && customRange != null) {
@@ -102,6 +106,8 @@ class MapViewModel @Inject constructor(
             customStartDate = customRange?.first,
             customEndDate = customRange?.second,
             dataUpdatedAt = events.maxOfOrNull(Event::updatedAt),
+            syncState = syncState,
+            syncDataPotentiallyStale = syncState.isPotentiallyStale(clock.instant()),
             searchQuery = content.query,
             selectedCategory = content.category,
             priceFilter = content.price,
@@ -197,4 +203,5 @@ class MapViewModel @Inject constructor(
         val eventId = selectedEventId.value ?: return
         viewModelScope.launch { repository.setAttendance(eventId, response) }
     }
+    fun retrySync() { viewModelScope.launch { synchronizer.synchronize() } }
 }

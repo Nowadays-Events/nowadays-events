@@ -20,32 +20,25 @@ import org.json.JSONObject
 class ApiEventSource @Inject constructor() : EventSource {
     override val name: String = "nowadays-api"
 
-    override suspend fun fetchEvents(updatedSince: Instant?): List<Event> = withContext(Dispatchers.IO) {
-        val connection = URL("${BuildConfig.NOWADAYS_API_BASE_URL.trimEnd('/')}/events")
-            .openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 5_000
-            connection.readTimeout = 10_000
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Accept", "application/json")
-            check(connection.responseCode in 200..299) { "Xymis Events API HTTP ${connection.responseCode}" }
-            val root = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-            val array = root.optJSONArray("events") ?: return@withContext emptyList()
-            buildList {
+    override suspend fun fetchSnapshot(): RemoteEventSnapshot = withContext(Dispatchers.IO) {
+        val base = BuildConfig.NOWADAYS_API_BASE_URL.trimEnd('/')
+        val root = JSONObject(fetchText("$base/events"))
+        val health = JSONObject(fetchText("$base/health.json"))
+        val array = root.getJSONArray("events")
+        val generatedAt = root.instant("generated_at")
+        val events = buildList {
                 for (index in 0 until array.length()) {
-                    val item = array.optJSONObject(index) ?: continue
-                    val updatedAt = item.instant("last_seen_at") ?: Instant.now()
-                    if (updatedSince != null && updatedAt <= updatedSince) continue
-                    val start = item.instant("start_at") ?: continue
+                    val item = array.getJSONObject(index)
+                    val updatedAt = item.instant("last_seen_at") ?: generatedAt ?: Instant.EPOCH
+                    val start = requireNotNull(item.instant("start_at")) { "event[$index].start_at missing or invalid" }
                     val end = item.instant("end_at") ?: start
                     val title = item.optString("title")
-                    if (title.isBlank()) continue
+                    require(title.isNotBlank()) { "event[$index].title missing" }
                     val occurrenceStarts = item.optJSONArray("occurrence_starts")?.let { values ->
                         buildList {
                             for (valueIndex in 0 until values.length()) {
-                                values.optString(valueIndex).takeIf(String::isNotBlank)
-                                    ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-                                    ?.let(::add)
+                                values.getString(valueIndex).takeIf(String::isNotBlank)
+                                    ?.let(Instant::parse)?.let(::add)
                             }
                         }
                     }.orEmpty().distinct().sorted()
@@ -102,10 +95,27 @@ class ApiEventSource @Inject constructor() : EventSource {
                         ),
                     )
                 }
-            }
-        } finally {
-            connection.disconnect()
         }
+        RemoteEventSnapshot(
+            events = events,
+            generatedAt = generatedAt,
+            healthStatus = health.optString("status", "missing"),
+            declaredEventCount = health.optInt("exported", -1),
+        )
+    }
+}
+
+private fun fetchText(url: String): String {
+    val connection = URL(url).openConnection() as HttpURLConnection
+    try {
+        connection.connectTimeout = 5_000
+        connection.readTimeout = 10_000
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "application/json")
+        check(connection.responseCode in 200..299) { "Xymis Events API HTTP ${connection.responseCode}" }
+        return connection.inputStream.bufferedReader().use { it.readText() }
+    } finally {
+        connection.disconnect()
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nowadays.events.data.local.EventDatabase
 import com.nowadays.events.data.local.MIGRATION_7_8
+import com.nowadays.events.data.local.MIGRATION_8_9
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -42,12 +43,12 @@ class TemporalDatabaseMigrationInstrumentedTest {
         }
 
         val room = Room.databaseBuilder(context, EventDatabase::class.java, databaseName)
-            .addMigrations(MIGRATION_7_8)
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
             .allowMainThreadQueries()
             .build()
         val database = room.openHelper.writableDatabase
 
-        assertEquals(8, database.version)
+        assertEquals(9, database.version)
         database.query(
             "SELECT id,schedule_type,occurrence_starts FROM events ORDER BY id",
         ).use { cursor ->

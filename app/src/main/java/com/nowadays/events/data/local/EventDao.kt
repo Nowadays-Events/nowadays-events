@@ -9,11 +9,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface EventDao {
-    @Query("SELECT * FROM events ORDER BY starts_at")
+    @Query("SELECT * FROM events WHERE origin != 'AUTOMATIC' OR is_remote_visible = 1 ORDER BY starts_at")
     fun observeAll(): Flow<List<EventEntity>>
 
-    @Query("SELECT * FROM events WHERE id = :id")
+    @Query("SELECT * FROM events WHERE id = :id AND (origin != 'AUTOMATIC' OR is_remote_visible = 1)")
     fun observeById(id: String): Flow<EventEntity?>
+
+    @Query("SELECT * FROM events ORDER BY starts_at")
+    suspend fun getAllIncludingHidden(): List<EventEntity>
 
     @Query("SELECT COUNT(*) FROM events")
     suspend fun count(): Int
@@ -23,6 +26,36 @@ interface EventDao {
 
     @Upsert
     suspend fun upsertAll(events: List<EventEntity>)
+
+    @Query("UPDATE events SET missed_snapshots = 0, is_remote_visible = 1 WHERE id IN (:presentIds) AND origin = 'AUTOMATIC'")
+    suspend fun markRemotePresent(presentIds: List<String>)
+
+    @Query("UPDATE events SET missed_snapshots = missed_snapshots + 1 WHERE origin = 'AUTOMATIC' AND id NOT IN (:presentIds)")
+    suspend fun incrementMissingRemote(presentIds: List<String>)
+
+    @Query("UPDATE events SET is_remote_visible = 0 WHERE origin = 'AUTOMATIC' AND missed_snapshots >= :threshold")
+    suspend fun hideMissingRemote(threshold: Int)
+
+    @Query("SELECT * FROM sync_state WHERE id = 1")
+    fun observeSyncState(): Flow<SyncStateEntity?>
+
+    @Query("SELECT * FROM sync_state WHERE id = 1")
+    suspend fun getSyncState(): SyncStateEntity?
+
+    @Upsert
+    suspend fun upsertSyncState(state: SyncStateEntity)
+
+    @Transaction
+    suspend fun reconcileRemoteSnapshot(events: List<EventEntity>, state: SyncStateEntity, absenceThreshold: Int) {
+        upsertAll(events)
+        val ids = events.map(EventEntity::id)
+        if (ids.isNotEmpty()) {
+            markRemotePresent(ids)
+            incrementMissingRemote(ids)
+            hideMissingRemote(absenceThreshold)
+        }
+        upsertSyncState(state)
+    }
 
     @Query("DELETE FROM events WHERE id = :eventId")
     suspend fun deleteEvent(eventId: String)

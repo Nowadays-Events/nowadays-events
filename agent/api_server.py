@@ -15,8 +15,14 @@ class EventsHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
-        if path == "/health":
-            self.send_json({"status": "ok"})
+        if path in {"/health", "/health.json"}:
+            health_path = self.feed_path.with_name("health.json")
+            try:
+                payload = json.loads(health_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                self.send_json({"status": "degraded", "error": str(error)}, status=503)
+                return
+            self.send_json(payload)
             return
         if path == "/events":
             try:

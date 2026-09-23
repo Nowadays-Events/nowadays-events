@@ -5,6 +5,12 @@ import java.time.Instant
 
 interface EventSource {
     val name: String
-    suspend fun fetchEvents(updatedSince: Instant? = null): List<Event>
+    suspend fun fetchSnapshot(): RemoteEventSnapshot
 }
 
+data class RemoteEventSnapshot(
+    val events: List<Event>,
+    val generatedAt: Instant?,
+    val healthStatus: String,
+    val declaredEventCount: Int,
+)

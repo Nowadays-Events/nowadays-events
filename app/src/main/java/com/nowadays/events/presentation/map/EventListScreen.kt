@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,6 +37,7 @@ import com.nowadays.events.domain.usecase.NearbyEvents
 import com.nowadays.events.presentation.eventScheduleLabel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.nowadays.events.domain.model.SyncStatus
 
 private data class ReferencePlace(val label: String, val latitude: Double, val longitude: Double)
 private val montDeMarsan = ReferencePlace("Mont-de-Marsan", 43.8904, -0.5007)
@@ -82,16 +84,19 @@ fun EventListScreen(
                 title = {
                     Column {
                         Text("Autour de ${if (usingMyPosition) "moi" else reference.label}", style = MaterialTheme.typography.titleLarge)
-                        val updated = state.dataUpdatedAt?.atZone(ZoneId.systemDefault())
-                            ?.format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))
                         Text(
-                            if (updated == null) "Xymis · v${BuildConfig.VERSION_NAME}" else "Actualisé le $updated · v${BuildConfig.VERSION_NAME}",
+                            syncStatusLabel(state.syncState, state.events.isNotEmpty(), state.syncDataPotentiallyStale) + " · v${BuildConfig.VERSION_NAME}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 actions = {
+                    if (state.syncState.status in setOf(SyncStatus.OFFLINE_WITH_CACHE, SyncStatus.FAILED_WITH_CACHE, SyncStatus.FAILED_EMPTY)) {
+                        IconButton(onClick = viewModel::retrySync, modifier = Modifier.testTag("retry-sync")) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Réessayer l’actualisation")
+                        }
+                    }
                     IconButton(onClick = onShowMap, modifier = Modifier.testTag("open-map")) {
                         Icon(Icons.Default.Map, contentDescription = "Afficher la carte")
                     }
@@ -174,6 +179,18 @@ fun EventListScreen(
         { start, end -> viewModel.selectCustomRange(start, end); showCalendar = false },
         { viewModel.selectFilter(com.nowadays.events.domain.model.TimeFilter.ALL_FUTURE); showCalendar = false },
     )
+}
+
+private fun syncStatusLabel(state: SyncState, hasCache: Boolean, stale: Boolean): String {
+    val date = state.lastSuccessAt?.atZone(ZoneId.systemDefault())?.format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))
+    return when (state.status) {
+        SyncStatus.RUNNING -> "Actualisation…"
+        SyncStatus.SUCCESS -> if (stale) "Données potentiellement anciennes" + (date?.let { " · du $it" } ?: "") else date?.let { "Actualisé le $it" } ?: "À jour"
+        SyncStatus.OFFLINE_WITH_CACHE -> "Hors connexion" + (date?.let { " · données du $it" } ?: " · données locales")
+        SyncStatus.FAILED_WITH_CACHE -> "Actualisation impossible" + (date?.let { " · données du $it" } ?: " · données locales")
+        SyncStatus.FAILED_EMPTY -> "Actualisation impossible · aucune donnée"
+        SyncStatus.NEVER -> if (hasCache) "Données locales · actualisation à venir" else "Première actualisation en attente"
+    }
 }
 
 @Composable
