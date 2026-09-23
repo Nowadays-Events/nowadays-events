@@ -8,6 +8,8 @@ import com.nowadays.events.data.local.EventDatabase
 import com.nowadays.events.data.local.MIGRATION_8_9
 import com.nowadays.events.data.local.SyncStateEntity
 import org.junit.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import kotlinx.coroutines.runBlocking
 
