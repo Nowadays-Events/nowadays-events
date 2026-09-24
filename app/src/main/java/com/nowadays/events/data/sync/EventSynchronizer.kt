@@ -63,13 +63,16 @@ class EventSynchronizer @Inject constructor(
             val duplicate = deduplicator.find(candidate, known)
             when (duplicate.match) {
                 DuplicateMatch.PROBABLE -> {
-                    requireNotNull(duplicate.event).let(reconciled::add)
+                    val current = requireNotNull(duplicate.event)
+                    val merged = deduplicator.merge(current, candidate, preferCandidate = false)
+                    reconciled += merged
+                    known[known.indexOf(current)] = merged
                     skipped++
                 }
                 DuplicateMatch.NONE -> { reconciled += candidate; known += candidate; inserted++ }
                 else -> {
                     val current = requireNotNull(duplicate.event)
-                    val merged = candidate.copy(id = current.id, goingCount = current.goingCount, maybeCount = current.maybeCount)
+                    val merged = deduplicator.merge(current, candidate)
                     reconciled += merged
                     known[known.indexOf(current)] = merged
                     updated++

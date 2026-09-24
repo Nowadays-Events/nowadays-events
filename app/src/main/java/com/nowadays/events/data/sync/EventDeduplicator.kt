@@ -2,7 +2,6 @@ package com.nowadays.events.data.sync
 
 import com.nowadays.events.domain.model.Event
 import java.text.Normalizer
-import java.time.Duration
 import javax.inject.Inject
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -16,7 +15,7 @@ data class DuplicateResult(val event: Event?, val match: DuplicateMatch)
 class EventDeduplicator @Inject constructor() {
     fun find(candidate: Event, existing: List<Event>): DuplicateResult {
         existing.firstOrNull { it.id == candidate.id }?.let { return DuplicateResult(it, DuplicateMatch.SAME_ID) }
-        existing.firstOrNull { canonicalUrl(it.sourceUrl) == canonicalUrl(candidate.sourceUrl) }
+        existing.firstOrNull { sameSourceOccurrence(it, candidate) }
             ?.let { return DuplicateResult(it, DuplicateMatch.SAME_SOURCE_URL) }
         existing.firstOrNull { fingerprint(it) == fingerprint(candidate) }
             ?.let { return DuplicateResult(it, DuplicateMatch.SAME_FINGERPRINT) }
@@ -25,13 +24,28 @@ class EventDeduplicator @Inject constructor() {
         return DuplicateResult(null, DuplicateMatch.NONE)
     }
 
+    fun merge(current: Event, candidate: Event, preferCandidate: Boolean = true): Event {
+        val sources = (current.sourceUrls + candidate.sourceUrls).distinct()
+        return if (preferCandidate) candidate.copy(
+            id = current.id,
+            goingCount = current.goingCount,
+            maybeCount = current.maybeCount,
+            sourceUrls = sources,
+        ) else current.copy(sourceUrls = sources)
+    }
+
     private fun fingerprint(event: Event) = listOf(
-        normalize(event.title), normalize(event.venueName), event.startsAt.toString().take(10),
+        normalize(event.title), normalize(event.venueName), event.startsAt.toString(),
     ).joinToString("|")
+
+    private fun sameSourceOccurrence(a: Event, b: Event): Boolean =
+        canonicalUrl(a.sourceUrl) == canonicalUrl(b.sourceUrl) &&
+            normalize(a.title) == normalize(b.title) &&
+            a.startsAt == b.startsAt
 
     private fun probableMatch(a: Event, b: Event): Boolean =
         normalize(a.title) == normalize(b.title) &&
-            Duration.between(a.startsAt, b.startsAt).abs() <= Duration.ofHours(2) &&
+            a.startsAt == b.startsAt &&
             distanceMeters(a.latitude, a.longitude, b.latitude, b.longitude) <= 250.0
 
     private fun normalize(value: String): String = Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
@@ -49,4 +63,3 @@ class EventDeduplicator @Inject constructor() {
         return 6_371_000 * 2 * atan2(sqrt(x), sqrt(1 - x))
     }
 }
-
