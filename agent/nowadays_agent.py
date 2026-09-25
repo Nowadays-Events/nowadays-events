@@ -422,6 +422,10 @@ def extract_dax_events(body: str, source_name: str, page_url: str) -> list[Event
         periods.sort(key=lambda period: str(period["debut"]))
         start_at = dax_period_datetime(periods[0], "debut")
         end_at = dax_period_datetime(periods[-1], "fin", end_of_day=True)
+        overnight_end_adjusted = False
+        if datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
+            end_at = (datetime.fromisoformat(end_at) + timedelta(days=1)).isoformat()
+            overnight_end_adjusted = True
         future_starts = [dax_period_datetime(period, "debut") for period in periods]
         next_occurrence = next((value for value in future_starts if datetime.fromisoformat(value) >= now), None)
         address = {
@@ -449,7 +453,9 @@ def extract_dax_events(body: str, source_name: str, page_url: str) -> list[Event
             "scheduleType": "recurring" if len(periods) > 1 else (
                 "continuous" if start_at[:10] != end_at[:10] else "single"
             ),
-            "scheduleReason": "dax_periods",
+            "scheduleReason": (
+                "dax_periods_overnight_end_adjusted" if overnight_end_adjusted else "dax_periods"
+            ),
             "keywords": " ".join(
                 localized_text(item.get("values") or item.get("value"))
                 for item in source.get("caracteristiques") or []

@@ -363,7 +363,7 @@ class NowadaysAgentTests(unittest.TestCase):
             "adresse1":"Arènes", "cp":"40100", "description":"Arènes de Dax",
             "commune":{"nom":{"fr":"DAX"}}},
           "informations":{"periode":[{"debut":"2026-08-20","fin":"2026-08-20",
-            "horaire":{"jeudi":["20:00","22:00"]}}],
+            "horaire":{"jeudi":["20:00","02:00"]}}],
             "tarifs":[{"min":12.5}]},
           "caracteristiques":[{"values":{"fr":"Concert"}}]
         }}];</script>'''
@@ -375,6 +375,9 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual((43.71, -1.05), (event.latitude, event.longitude))
         self.assertEqual("paid", event.price_type)
         self.assertEqual(1250, event.price_cents)
+        self.assertEqual("2026-08-20T18:00:00+00:00", event.start_at)
+        self.assertEqual("2026-08-21T00:00:00+00:00", event.end_at)
+        self.assertEqual("dax_periods_overnight_end_adjusted", event.schedule_reason)
         self.assertIn("DAX", event.address)
 
     def test_grand_dax_source_is_marked_as_dax_coverage(self):
