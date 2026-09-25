@@ -1170,13 +1170,20 @@ def consolidate_duplicates(connection: sqlite3.Connection) -> int:
     return merged
 
 
-def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None) -> int:
+def hydrate_previous_feed(
+    connection: sqlite3.Connection,
+    feed_path: Path | None,
+    reference_time: datetime | None = None,
+) -> int:
     """Recharge le dernier flux public pour conserver l'historique entre deux runners GitHub."""
     if feed_path is None or not feed_path.exists():
         return 0
     payload = json.loads(feed_path.read_text(encoding="utf-8"))
     hydrated = 0
-    history_cutoff = datetime.now(timezone.utc) - timedelta(days=45)
+    now = reference_time or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    history_cutoff = now - timedelta(days=45)
     for item in payload.get("events", []):
         required = ("external_id", "title", "start_at", "end_at", "latitude", "longitude")
         if any(item.get(key) is None for key in required):
@@ -1203,8 +1210,8 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
                 item["start_at"], item["end_at"], item.get("venue", ""), item.get("address", ""),
                 item["latitude"], item["longitude"], item.get("status", "active"),
                 item.get("fingerprint") or hashlib.sha256(str(item["external_id"]).encode()).hexdigest()[:24],
-                item.get("first_seen_at") or item.get("last_seen_at") or datetime.now(timezone.utc).isoformat(),
-                item.get("last_seen_at") or datetime.now(timezone.utc).isoformat(),
+                item.get("first_seen_at") or item.get("last_seen_at") or now.isoformat(),
+                item.get("last_seen_at") or now.isoformat(),
                 item.get("category", "COMMUNITY"), item.get("price_type", "unknown"),
                 item.get("price_cents"), item.get("currency", "EUR"),
                 item.get("occurrence_count", 1), item.get("next_occurrence_at"),
@@ -1217,7 +1224,7 @@ def hydrate_previous_feed(connection: sqlite3.Connection, feed_path: Path | None
         for url in item.get("source_urls") or []:
             connection.execute(
                 "INSERT OR IGNORE INTO event_sources VALUES (?,?,?,?)",
-                (item["external_id"], url, "Flux public précédent", item.get("last_seen_at") or datetime.now(timezone.utc).isoformat()),
+                (item["external_id"], url, "Flux public précédent", item.get("last_seen_at") or now.isoformat()),
             )
         hydrated += 1
     return hydrated

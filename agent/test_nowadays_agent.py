@@ -848,24 +848,36 @@ class NowadaysAgentTests(unittest.TestCase):
             }]}), encoding="utf-8")
             database = sqlite3.connect(":memory:")
             database.executescript(SCHEMA)
-            self.assertEqual(1, hydrate_previous_feed(database, feed))
+            reference_time = datetime.fromisoformat("2026-09-20T10:00:00+00:00")
+            self.assertEqual(1, hydrate_previous_feed(database, feed, reference_time))
             self.assertEqual(1, mark_unverified(database, "2026-08-06T10:00:00+00:00"))
             self.assertEqual("unverified", database.execute("SELECT status FROM events").fetchone()[0])
 
     def test_previous_feed_drops_obviously_stale_events(self):
         with tempfile.TemporaryDirectory() as directory:
             feed = Path(directory) / "previous.json"
-            feed.write_text(json.dumps({"events": [{
-                "external_id": "bad-year", "title": "Date mal interprétée", "description": "",
-                "start_at": "2014-08-11T00:00:00+00:00", "end_at": "2014-08-11T00:00:00+00:00",
-                "venue": "", "address": "Roquefort", "latitude": 44.03, "longitude": -0.32,
-                "status": "unverified", "fingerprint": "old-fingerprint",
-                "source_urls": ["https://example.org/old"],
-            }]}), encoding="utf-8")
+            feed.write_text(json.dumps({"events": [
+                {
+                    "external_id": "bad-year", "title": "Date mal interprétée", "description": "",
+                    "start_at": "2014-08-11T00:00:00+00:00", "end_at": "2014-08-11T00:00:00+00:00",
+                    "venue": "", "address": "Roquefort", "latitude": 44.03, "longitude": -0.32,
+                    "status": "unverified", "fingerprint": "old-fingerprint",
+                    "source_urls": ["https://example.org/old"],
+                },
+                {
+                    "external_id": "boundary", "title": "Événement à la limite", "description": "",
+                    "start_at": "2026-08-06T08:00:00+00:00", "end_at": "2026-08-06T10:00:00+00:00",
+                    "venue": "Salle", "address": "Mont-de-Marsan", "latitude": 43.89, "longitude": -0.50,
+                    "status": "active", "fingerprint": "fingerprint-boundary",
+                    "source_urls": ["https://example.org/boundary"],
+                },
+            ]}), encoding="utf-8")
             database = sqlite3.connect(":memory:")
             database.executescript(SCHEMA)
-            self.assertEqual(0, hydrate_previous_feed(database, feed))
-            self.assertEqual(0, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+            reference_time = datetime.fromisoformat("2026-09-20T10:00:00+00:00")
+            self.assertEqual(1, hydrate_previous_feed(database, feed, reference_time))
+            self.assertEqual(1, database.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+            self.assertEqual("boundary", database.execute("SELECT external_id FROM events").fetchone()[0])
 
 
 if __name__ == "__main__":
