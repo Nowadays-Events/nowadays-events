@@ -30,12 +30,13 @@ internal object CompactEventListPolicy {
             val event = item.event
             val usefulStart = if (event.scheduleType == EventScheduleType.RECURRING) event.nextOccurrenceAt ?: event.startsAt else event.startsAt
             val day = usefulStart.atZone(zoneId).toLocalDate()
+            val isInProgress = event.scheduleType != EventScheduleType.RECURRING && event.startsAt <= now && event.endsAt >= now
             val title = when (filter) {
-                TimeFilter.TODAY -> if (event.startsAt <= now && event.endsAt >= now) "En cours" else "Plus tard aujourd’hui"
+                TimeFilter.TODAY -> if (isInProgress) "En cours" else "Plus tard aujourd’hui"
                 TimeFilter.TOMORROW -> "Demain"
                 TimeFilter.THIS_WEEKEND -> "Ce week-end"
                 else -> when {
-                    event.startsAt <= now && event.endsAt >= now -> "En cours"
+                    isInProgress -> "En cours"
                     day == today -> "Plus tard aujourd’hui"
                     day == today.plusDays(1) -> "Demain"
                     else -> "Prochainement"
