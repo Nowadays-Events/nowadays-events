@@ -10,11 +10,15 @@ import kotlinx.coroutines.withContext
 
 data class LocationSuggestion(val label: String, val latitude: Double, val longitude: Double)
 
-class LocationSearchService @Inject constructor(@ApplicationContext context: Context) {
+interface LocationSearcher {
+    suspend fun search(query: String, near: String? = null): List<LocationSuggestion>
+}
+
+class LocationSearchService @Inject constructor(@ApplicationContext context: Context) : LocationSearcher {
     private val geocoder = Geocoder(context, Locale.FRANCE)
 
     @Suppress("DEPRECATION")
-    suspend fun search(query: String, near: String? = null): List<LocationSuggestion> = withContext(Dispatchers.IO) {
+    override suspend fun search(query: String, near: String?): List<LocationSuggestion> = withContext(Dispatchers.IO) {
         if (query.trim().length < 3 || !Geocoder.isPresent()) return@withContext emptyList()
         runCatching {
             geocoder.getFromLocationName(listOfNotNull(query.trim(), near?.takeIf { it.isNotBlank() }).joinToString(", "), 6)

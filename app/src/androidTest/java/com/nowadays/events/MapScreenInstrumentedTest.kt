@@ -39,4 +39,20 @@ class MapScreenInstrumentedTest {
             compose.onNodeWithText(selectedText).assertIsDisplayed()
         }
     }
+
+    @Test fun compactHeaderOpensPlaceChooserInOneTap() {
+        compose.onNodeWithTag("reference-place-button").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Lieu de référence").assertIsDisplayed()
+        compose.onNodeWithTag("choose-my-position").assertIsDisplayed()
+        compose.onNodeWithTag("city-search").assertIsDisplayed()
+        compose.onNodeWithTag("choose-map-point").assertIsDisplayed()
+    }
+
+    @Test fun secondaryFiltersContainRadiusAndSurviveRecreation() {
+        compose.onNodeWithTag("open-filters").performClick()
+        compose.onNodeWithTag("radius-15").performClick()
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("15 km", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("compact-sync-state").assertIsDisplayed()
+    }
 }

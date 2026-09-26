@@ -44,6 +44,7 @@ class EventDetailInstrumentedTest {
             instant, instant.plusSeconds(3600), "Lieu", "Adresse", 43.89, -0.50,
             "https://example.invalid/map", null, null, EventPrice.Unknown, instant, DataOrigin.DEMO)
         compose.setContent { NowadaysTheme { EventDetailContent(event, attendance = AttendanceResponse.NONE, onAttendanceChanged = {}, onShowMap = {}) } }
+        compose.onNodeWithTag("event-map-preview").assertIsDisplayed()
         compose.onNodeWithTag("show-event-on-map").assertIsDisplayed()
         compose.onNodeWithText("Tarif non renseigné").assertIsDisplayed()
     }
