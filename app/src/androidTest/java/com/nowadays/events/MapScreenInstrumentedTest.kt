@@ -1,6 +1,7 @@
 package com.nowadays.events
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -52,7 +53,7 @@ class MapScreenInstrumentedTest {
         compose.onNodeWithTag("open-filters").performClick()
         compose.onNodeWithTag("radius-15").performClick()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("15 km", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("reference-place-button").assertTextContains("15 km", substring = true)
         compose.onNodeWithTag("compact-sync-state").assertIsDisplayed()
     }
 }

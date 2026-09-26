@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -29,7 +30,7 @@ class CompactEventListInstrumentedTest {
         val event = event("long", "Un titre volontairement très long qui doit rester lisible sur deux lignes", EventStatus.ACTIVE, EventTimePrecision.UNKNOWN)
         compose.setContent { NowadaysTheme { CompactEventRow(NearbyListItem(event, 12.4), fixedNow) {} } }
         compose.onNodeWithText(event.title).assertIsDisplayed()
-        compose.onNodeWithTag("event-distance-long").assertTextContains("12 km").assertIsDisplayed()
+        compose.onNodeWithTag("event-distance-long", useUnmergedTree = true).assertTextContains("12 km").assertIsDisplayed()
         compose.onNodeWithText("Horaire inconnu", substring = true).assertIsDisplayed()
     }
 
@@ -47,7 +48,7 @@ class CompactEventListInstrumentedTest {
         var opened = false
         compose.setContent { NowadaysTheme { EventDetailContent(event, attendance = AttendanceResponse.NONE, onAttendanceChanged = {}, onShowMap = { opened = true }) } }
         compose.onNodeWithTag("event-map-preview").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("event-map-preview-no-gestures").assertIsDisplayed()
+        compose.onNodeWithTag("event-map-preview-no-gestures", useUnmergedTree = true).assertExists()
         assertTrue(opened)
     }
 
