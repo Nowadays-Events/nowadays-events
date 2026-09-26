@@ -6,7 +6,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -48,7 +47,7 @@ class CompactEventListInstrumentedTest {
         var opened = false
         compose.setContent { NowadaysTheme { EventDetailContent(event, attendance = AttendanceResponse.NONE, onAttendanceChanged = {}, onShowMap = { opened = true }) } }
         compose.onNodeWithTag("event-map-preview").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("event-map-preview-no-gestures", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("event-map-preview-no-gestures", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(opened)
     }
 
