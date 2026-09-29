@@ -279,10 +279,21 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     latitude = parse_float(geo.get("latitude"))
     longitude = parse_float(geo.get("longitude"))
     title = html.unescape(first_text(node.get("name"))).strip()
-    start_at = iso_datetime(node.get("startDate"))
+    raw_start = str(node.get("startDate") or "").strip()
+    raw_end = str(node.get("endDate") or "").strip()
+    date_only_start = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_start))
+    date_only_end = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_end))
+    paris = ZoneInfo("Europe/Paris")
+    start_at = (
+        datetime.fromisoformat(raw_start).replace(tzinfo=paris).astimezone(timezone.utc).isoformat()
+        if date_only_start else iso_datetime(raw_start)
+    )
     if not title or not start_at or latitude is None or longitude is None:
         return None
-    end_at = iso_datetime(node.get("endDate")) or start_at
+    end_at = (
+        datetime.fromisoformat(raw_end).replace(tzinfo=paris).astimezone(timezone.utc).isoformat()
+        if date_only_end else iso_datetime(raw_end)
+    ) or start_at
     event_url = canonical_url(first_text(node.get("url")) or page_url)
     status_value = normalize(first_text(node.get("eventStatus")))
     combined = normalize(" ".join((title, first_text(node.get("description")), status_value)))
@@ -323,7 +334,6 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
     else:
         schedule_type = "single"
         schedule_reason = "single_date"
-    raw_start = str(node.get("startDate") or "").strip()
     explicit_precision = normalize(str(node.get("timePrecision") or "")).replace(" ", "_")
     time_precision = explicit_precision if explicit_precision in {"exact", "approximate", "date_only", "unknown"} else (
         "date_only" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_start) else "exact"
@@ -481,6 +491,12 @@ def enrich_recurring_events(
     """Ajoute la prochaine occurrence à partir des périodes Tourinsoft du HTML."""
     reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     decoded_body = html.unescape(body)
+    timezone_match = re.search(r'"timezone"\s*:\s*"([^"\n]+)"', decoded_body)
+    timezone_name = timezone_match.group(1).replace("\\/", "/") if timezone_match else None
+    try:
+        site_timezone = ZoneInfo(timezone_name) if timezone_name else None
+    except (KeyError, ValueError):
+        site_timezone = None
     offset_match = re.search(r'"startDate"\s*:\s*"[^"\n]*([+-])(\d{2}):(\d{2})"', decoded_body)
     if offset_match:
         offset_minutes = int(offset_match.group(2)) * 60 + int(offset_match.group(3))
@@ -489,81 +505,123 @@ def enrich_recurring_events(
         page_timezone = timezone(timedelta(minutes=offset_minutes))
     else:
         page_timezone = timezone.utc
-    schedules: list[dict[str, Any]] = []
-    explicit_occurrences: list[datetime] = []
+    page_timezone = site_timezone or page_timezone
+    occurrences: list[datetime] = []
+    parsed_occurrences: list[datetime] = []
+    has_timed_occurrence = False
+    has_untimed_occurrence = False
+    used_discrete_periods = False
+    used_weekly_rule = False
+    saw_recurrence_span = False
+
+    def schedule_times(items: Any) -> list[str | None]:
+        values = [str(item.get("startTime")) for item in items or [] if isinstance(item, dict) and item.get("startTime")]
+        return values or [None]
+
+    def append_occurrence(day: datetime, start_time: str | None, period_timezone: Any) -> None:
+        nonlocal has_timed_occurrence, has_untimed_occurrence
+        if start_time:
+            has_timed_occurrence = True
+            try:
+                hour, minute, second = (int(part) for part in start_time.split(":"))
+            except ValueError:
+                return
+        else:
+            has_untimed_occurrence = True
+            hour = minute = second = 0
+        occurrence = datetime(day.year, day.month, day.day, hour, minute, second, tzinfo=period_timezone)
+        utc_occurrence = occurrence.astimezone(timezone.utc)
+        parsed_occurrences.append(utc_occurrence)
+        if utc_occurrence >= reference:
+            occurrences.append(utc_occurrence)
+
     for _, encoded in re.findall(r"\bperiods=(['\"])(.*?)\1", body, flags=re.IGNORECASE | re.DOTALL):
         try:
             payload = json.loads(html.unescape(encoded))
         except (json.JSONDecodeError, TypeError):
             continue
-        if isinstance(payload, list):
-            schedules.extend(item for item in payload if isinstance(item, dict) and item.get("startDate") and item.get("days"))
-            for item in payload:
-                if not isinstance(item, dict) or not item.get("date"):
-                    continue
-                first_schedule = (item.get("schedules") or [{}])[0]
-                start_time = str(first_schedule.get("startTime") or "00:00:00")
+        if not isinstance(payload, list):
+            continue
+        for period in payload:
+            if not isinstance(period, dict):
+                continue
+            if period.get("date"):
                 try:
-                    explicit = datetime.fromisoformat(f"{item['date']}T{start_time}").replace(tzinfo=page_timezone)
+                    day = datetime.fromisoformat(str(period["date"]))
                 except ValueError:
                     continue
-                if explicit >= reference:
-                    explicit_occurrences.append(explicit.astimezone(timezone.utc))
-    if not schedules and not explicit_occurrences:
-        return events
+                used_discrete_periods = True
+                for start_time in schedule_times(period.get("schedules")):
+                    append_occurrence(day, start_time, page_timezone)
+                continue
+            if not period.get("startDate"):
+                continue
+            try:
+                start = datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
+                end = datetime.fromisoformat(str(period.get("endDate") or period["startDate"]).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            period_timezone = site_timezone or start.tzinfo or page_timezone
+            local_start = start.astimezone(period_timezone)
+            local_end = end.astimezone(period_timezone)
+            nested_days = [
+                day for group in period.get("days") or [] if isinstance(group, dict)
+                for day in group.get("days") or [] if isinstance(day, dict)
+            ]
+            is_one_day = bool(period.get("_isOneDay")) or local_start.date() == local_end.date()
+            if is_one_day:
+                used_discrete_periods = True
+                times = [value for day in nested_days for value in schedule_times(day.get("schedules"))]
+                for start_time in times or [None]:
+                    append_occurrence(local_start, start_time, period_timezone)
+                continue
 
-    occurrences: list[datetime] = list(explicit_occurrences)
-    for period in schedules:
-        try:
-            start = datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
-            end = datetime.fromisoformat(str(period.get("endDate") or period["startDate"]).replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        period_timezone = start.tzinfo or timezone.utc
-        start = start.astimezone(timezone.utc)
-        end = end.astimezone(timezone.utc)
-        weekdays: set[int] = set()
-        times: dict[int, str] = {}
-        for group in period.get("days") or []:
-            for day in group.get("days") or []:
+            if nested_days:
+                saw_recurrence_span = True
+            formatted_days = [day for day in period.get("_formated_days") or [] if isinstance(day, dict)]
+            weekly_days = formatted_days or nested_days
+            weekday_times: dict[int, list[str | None]] = {}
+            for day in weekly_days:
                 try:
                     weekday = int(str(day.get("day", "")).rsplit(".", 1)[-1]) - 2
                 except ValueError:
                     continue
-                # 09.02.08 représente des dates irrégulières, pas le dimanche.
-                # Celles-ci sont fournies séparément sous la forme {"date": ...}.
-                if 0 <= weekday <= 5:
-                    weekdays.add(weekday)
-                    first_schedule = (day.get("schedules") or [{}])[0]
-                    times[weekday] = str(first_schedule.get("startTime") or "00:00:00")
-        cursor = max(reference.date(), start.date())
-        while cursor <= end.date():
-            if cursor.weekday() in weekdays:
-                try:
-                    hour, minute, second = (int(part) for part in times[cursor.weekday()].split(":"))
-                except (ValueError, KeyError):
-                    hour = minute = second = 0
-                occurrence = datetime(
-                    cursor.year, cursor.month, cursor.day, hour, minute, second, tzinfo=period_timezone,
-                ).astimezone(timezone.utc)
-                if occurrence >= reference:
-                    occurrences.append(occurrence)
-            cursor += timedelta(days=1)
+                # Dans les jours bruts Tourinsoft, 09.02.08 sert aussi de marqueur
+                # « dates discrètes ». Les vrais dimanches sont utilisables quand
+                # Tourinsoft fournit la liste normalisée `_formated_days`.
+                if 0 <= weekday <= 6 and (formatted_days or weekday < 6):
+                    weekday_times.setdefault(weekday, []).extend(schedule_times(day.get("schedules")))
+            if not weekday_times:
+                continue
+            used_weekly_rule = True
+            cursor = local_start.date()
+            while cursor <= local_end.date():
+                for start_time in weekday_times.get(cursor.weekday(), []):
+                    append_occurrence(
+                        datetime(cursor.year, cursor.month, cursor.day), start_time, period_timezone,
+                    )
+                cursor += timedelta(days=1)
     if not occurrences:
         return events
     unique_occurrences = sorted(set(occurrences))
+    unique_parsed_occurrences = sorted(set(parsed_occurrences))
+    schedule_reason = "tourinsoft_weekly_rule" if used_weekly_rule else "tourinsoft_discrete_periods"
     return [
         replace(
             event,
             occurrence_count=max(
                 event.occurrence_count,
+                len(unique_parsed_occurrences),
                 len(unique_occurrences),
-                2 if explicit_occurrences and event.end_at[:10] != event.start_at[:10] else 1,
+                2 if saw_recurrence_span else 1,
             ),
             next_occurrence_at=unique_occurrences[0].isoformat(),
             schedule_type="recurring",
             occurrence_starts=tuple(value.isoformat() for value in unique_occurrences),
-            schedule_reason="tourinsoft_schedule",
+            schedule_reason=schedule_reason,
+            time_precision=(
+                "exact" if has_timed_occurrence and not has_untimed_occurrence else event.time_precision
+            ),
         )
         for event in events
     ]
@@ -1319,12 +1377,18 @@ def normalize_export_schedule(item: dict[str, Any], reference: datetime) -> dict
         end = end.replace(tzinfo=timezone.utc)
     # Les sources touristiques utilisent 00:00 quand aucun horaire n'est
     # fourni. La manifestation reste alors valable pendant toute la journée.
-    if (
-        item.get("time_precision") != "exact"
-        and end.hour == 0 and end.minute == 0 and end.second == 0
-    ):
-        end = end + timedelta(days=1) - timedelta(seconds=1)
-        normalized_item["end_at"] = end.isoformat()
+    if item.get("time_precision") != "exact":
+        paris = ZoneInfo("Europe/Paris")
+        local_end = end.astimezone(paris)
+        if end.hour == 0 and end.minute == 0 and end.second == 0:
+            end = end + timedelta(days=1) - timedelta(seconds=1)
+            normalized_item["end_at"] = end.isoformat()
+        elif local_end.hour == 0 and local_end.minute == 0 and local_end.second == 0:
+            end = (
+                datetime.combine(local_end.date() + timedelta(days=1), datetime.min.time(), tzinfo=paris)
+                - timedelta(seconds=1)
+            ).astimezone(end.tzinfo or timezone.utc)
+            normalized_item["end_at"] = end.isoformat()
 
     normalized_item["schedule_type"] = legacy_schedule_type(item)
     if normalized_item["schedule_type"] != "recurring" or item.get("status", "active") not in {"active", "unverified"}:

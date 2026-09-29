@@ -9,6 +9,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val dayFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.FRENCH)
+private val weekdayFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.FRENCH)
 
 fun eventScheduleLabel(
     event: Event,
@@ -22,6 +23,15 @@ fun eventScheduleLabel(
         val startDay = event.startsAt.atZone(zoneId).format(dayFormatter).replaceFirstChar { it.uppercase() }
         val endDay = event.endsAt.atZone(zoneId).format(dayFormatter)
         return if (now in event.startsAt..event.endsAt) "En cours · jusqu’au $endDay" else "Du $startDay au $endDay"
+    }
+    if (
+        event.scheduleType == EventScheduleType.SINGLE &&
+        event.timePrecision == EventTimePrecision.EXACT &&
+        now in event.startsAt..event.endsAt &&
+        event.startsAt.atZone(zoneId).toLocalDate() < now.atZone(zoneId).toLocalDate()
+    ) {
+        val startWeekday = event.startsAt.atZone(zoneId).format(weekdayFormatter)
+        return "En cours depuis $startWeekday"
     }
     val instant = if (event.scheduleType == EventScheduleType.RECURRING) event.nextOccurrenceAt!! else event.startsAt
     val date = instant.atZone(zoneId)

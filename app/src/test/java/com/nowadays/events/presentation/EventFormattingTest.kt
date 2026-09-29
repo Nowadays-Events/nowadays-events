@@ -63,4 +63,14 @@ class EventFormattingTest {
         ), paris)
         assertEquals("Aucune prochaine occurrence", value)
     }
+
+    @Test fun `overnight event says it is still in progress since saturday`() {
+        val value = eventScheduleLabel(event("overnight").copy(
+            startsAt = Instant.parse("2026-09-26T20:00:00Z"),
+            endsAt = Instant.parse("2026-09-27T01:00:00Z"),
+            scheduleType = EventScheduleType.SINGLE,
+            timePrecision = EventTimePrecision.EXACT,
+        ), paris, Instant.parse("2026-09-26T23:10:00Z"))
+        assertTrue(value.startsWith("En cours depuis samedi"))
+    }
 }

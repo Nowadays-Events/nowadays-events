@@ -2,6 +2,7 @@ package com.nowadays.events.domain.usecase
 
 import com.nowadays.events.domain.model.Event
 import com.nowadays.events.domain.model.EventScheduleType
+import com.nowadays.events.domain.model.EventTimePrecision
 import com.nowadays.events.domain.model.TimeFilter
 import java.time.Clock
 import java.time.DayOfWeek
@@ -41,7 +42,7 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
 
     fun apply(events: List<Event>, filter: TimeFilter, zoneId: ZoneId = ZoneId.systemDefault()): List<Event> {
         val window = window(filter, zoneId)
-        return events.mapNotNull { it.forWindow(window, clock.instant()) }.sortedBy(::relevantStart)
+        return events.mapNotNull { it.forWindow(window, clock.instant(), zoneId) }.sortedBy(::relevantStart)
     }
 
     fun apply(
@@ -53,14 +54,21 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
         val start = startDate.atStartOfDay(zoneId).toInstant()
         val endExclusive = endDateInclusive.plusDays(1).atStartOfDay(zoneId).toInstant()
         val window = TimeWindow(start, endExclusive)
-        return events.mapNotNull { it.forWindow(window, clock.instant()) }.sortedBy(::relevantStart)
+        return events.mapNotNull { it.forWindow(window, clock.instant(), zoneId) }.sortedBy(::relevantStart)
     }
 
     private fun relevantStart(event: Event): Instant =
         if (event.scheduleType == EventScheduleType.RECURRING) event.nextOccurrenceAt ?: Instant.MAX else event.startsAt
 
-    private fun Event.forWindow(window: TimeWindow, now: Instant): Event? {
-        if (endsAt < now && scheduleType != EventScheduleType.RECURRING) return null
+    private fun Event.forWindow(window: TimeWindow, now: Instant, zoneId: ZoneId): Event? {
+        val effectiveEnd = if (
+            scheduleType == EventScheduleType.SINGLE && timePrecision == EventTimePrecision.DATE_ONLY
+        ) {
+            startsAt.atZone(zoneId).toLocalDate().plusDays(1).atStartOfDay(zoneId).toInstant().minusNanos(1)
+        } else {
+            endsAt
+        }
+        if (effectiveEnd < now && scheduleType != EventScheduleType.RECURRING) return null
         if (scheduleType == EventScheduleType.RECURRING) {
             val occurrence = (occurrenceStarts + listOfNotNull(nextOccurrenceAt))
                 .distinct().sorted()
@@ -71,7 +79,7 @@ class EventTimeFilters @Inject constructor(private val clock: Clock) {
             return copy(nextOccurrenceAt = occurrence)
         }
         return takeIf {
-            endsAt >= window.start && (window.endExclusive == null || startsAt < window.endExclusive)
+            effectiveEnd >= window.start && (window.endExclusive == null || startsAt < window.endExclusive)
         }
     }
 }

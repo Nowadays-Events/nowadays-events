@@ -182,6 +182,70 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("2026-08-17T08:00:00+00:00", enriched.next_occurrence_at)
         self.assertGreater(enriched.occurrence_count, 1)
 
+    def test_tourinsoft_discrete_periods_keep_each_club_lecture_time(self):
+        base = event_from_curated({
+            "@type": "Event", "name": "Club lecture",
+            "startDate": "2026-09-25T00:00:00+02:00",
+            "endDate": "2026-12-10T23:59:59+01:00",
+            "url": "https://example.org/club-lecture",
+            "location": {"name": "Médiathèque", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        })
+        periods = [
+            {
+                "startDate": "2026-09-25T00:00:00+02:00", "endDate": "2026-09-25T23:59:59+02:00",
+                "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "14:00:00"}]}]}],
+                "_isOneDay": True,
+            },
+            {
+                "startDate": "2026-10-29T00:00:00+01:00", "endDate": "2026-10-29T23:59:59+01:00",
+                "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "14:15:00"}]}]}],
+                "_isOneDay": True,
+            },
+            {
+                "startDate": "2026-12-10T00:00:00+01:00", "endDate": "2026-12-10T23:59:59+01:00",
+                "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "14:00:00"}]}]}],
+                "_isOneDay": True,
+            },
+        ]
+        enriched = enrich_recurring_events(
+            [base], f"<li periods='{json.dumps(periods)}'></li>",
+            datetime.fromisoformat("2026-09-20T00:00:00+02:00"),
+        )[0]
+        self.assertEqual("recurring", enriched.schedule_type)
+        self.assertEqual("tourinsoft_discrete_periods", enriched.schedule_reason)
+        self.assertEqual((
+            "2026-09-25T12:00:00+00:00",
+            "2026-10-29T13:15:00+00:00",
+            "2026-12-10T13:00:00+00:00",
+        ), enriched.occurrence_starts)
+        self.assertEqual("exact", enriched.time_precision)
+
+    def test_tourinsoft_bounded_weekly_rule_expands_real_thursdays(self):
+        base = event_from_curated({
+            "@type": "Event", "name": "Atelier régulier",
+            "startDate": "2026-09-10T00:00:00+02:00",
+            "endDate": "2026-10-29T23:59:59+01:00",
+            "url": "https://example.org/atelier-regulier",
+            "location": {"name": "Atelier", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        })
+        periods = [{
+            "startDate": "2026-09-17T00:00:00+02:00", "endDate": "2026-10-29T23:59:59+01:00",
+            "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "18:00:00"}]}]}],
+            "_isOneDay": False, "_isMultipleOneDays": True,
+            "_formated_days": [{"day": "09.02.05", "schedules": [{"startTime": "18:00:00"}]}],
+            "_multipleDay": {"code": "09.02.05", "label": "thursday"},
+        }]
+        enriched = enrich_recurring_events(
+            [base], f'<script>window.conf={{"timezone":"Europe\\/Paris"}}</script><li periods=\'{json.dumps(periods)}\'></li>',
+            datetime.fromisoformat("2026-09-16T00:00:00+02:00"),
+        )[0]
+        self.assertEqual("tourinsoft_weekly_rule", enriched.schedule_reason)
+        self.assertEqual(7, len(enriched.occurrence_starts))
+        self.assertTrue(all(datetime.fromisoformat(value).weekday() == 3 for value in enriched.occurrence_starts))
+        self.assertEqual("2026-09-17T16:00:00+00:00", enriched.next_occurrence_at)
+        self.assertEqual("2026-10-29T17:00:00+00:00", enriched.occurrence_starts[-1])
+        self.assertEqual("exact", enriched.time_precision)
+
     def test_builds_validated_curated_event(self):
         event = event_from_curated({
             "@type": "Event",
@@ -814,6 +878,21 @@ class NowadaysAgentTests(unittest.TestCase):
         }, now)
         self.assertEqual("2026-09-20T00:00:00+02:00", exact["end_at"])
         self.assertEqual("2026-09-20T23:59:59+02:00", date_only["end_at"])
+
+    def test_saturday_date_without_time_is_not_active_sunday_after_midnight(self):
+        payload = {
+            "@type": "Event", "name": "Activité du samedi",
+            "startDate": "2026-09-26", "endDate": "2026-09-26",
+            "url": "https://example.org/saturday",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        }
+        event = extract_events(
+            f'<script type="application/ld+json">{json.dumps(payload)}</script>', "Test", payload["url"],
+        )[0]
+        reference = datetime.fromisoformat("2026-09-27T01:10:00+02:00")
+        normalized = normalize_export_schedule({**event.__dict__, "status": "active"}, reference)
+        self.assertEqual("2026-09-26T21:59:59+00:00", normalized["end_at"])
+        self.assertFalse(should_export_event(normalized, reference))
 
     def test_recurrence_keeps_only_real_future_occurrences(self):
         now = datetime.fromisoformat("2026-09-20T10:00:00+02:00")
