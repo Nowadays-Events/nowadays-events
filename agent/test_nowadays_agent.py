@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.error import URLError
 
-from nowadays_agent import SCHEMA, collection_status, consolidate_duplicates, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_pierre_event, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, should_export_event
+from nowadays_agent import SCHEMA, collection_status, consolidate_duplicates, coverage_readiness, detail_links, distance_km, enrich_recurring_events, event_from_curated, export_candidates, export_feed, extract_armagnac_event, extract_biscarrosse_event, extract_dax_events, extract_detail_events, extract_events, extract_saint_pierre_event, extract_saint_sever_event, geocode_coordinates, hydrate_previous_feed, is_transient_network_error, likely_duplicate, listing_page_url, mark_unverified, merge_event_status, normalize_export_schedule, persist, priority_detail_links, should_export_event
 
 
 class NowadaysAgentTests(unittest.TestCase):
@@ -219,6 +219,9 @@ class NowadaysAgentTests(unittest.TestCase):
             "2026-12-10T13:00:00+00:00",
         ), enriched.occurrence_starts)
         self.assertEqual("exact", enriched.time_precision)
+        self.assertGreaterEqual(datetime.fromisoformat(enriched.end_at), datetime.fromisoformat(enriched.occurrence_starts[-1]))
+        normalized = normalize_export_schedule(enriched.__dict__, datetime.fromisoformat("2026-10-01T12:00:00+02:00"))
+        self.assertEqual("2026-12-10T13:00:00+00:00", normalized["occurrence_starts"][-1])
 
     def test_tourinsoft_bounded_weekly_rule_expands_real_thursdays(self):
         base = event_from_curated({
@@ -245,6 +248,45 @@ class NowadaysAgentTests(unittest.TestCase):
         self.assertEqual("2026-09-17T16:00:00+00:00", enriched.next_occurrence_at)
         self.assertEqual("2026-10-29T17:00:00+00:00", enriched.occurrence_starts[-1])
         self.assertEqual("exact", enriched.time_precision)
+        normalized = normalize_export_schedule(enriched.__dict__, datetime.fromisoformat("2026-10-01T12:00:00+02:00"))
+        self.assertEqual("2026-10-29T17:00:00+00:00", normalized["occurrence_starts"][-1])
+
+    def test_expired_tourinsoft_recurrence_never_falls_back_to_continuous(self):
+        base = event_from_curated({
+            "@type": "Event", "name": "Atelier", "startDate": "2026-09-01",
+            "endDate": "2026-12-31", "url": "https://example.org/atelier",
+            "location": {"name": "Salle", "geo": {"latitude": 43.89, "longitude": -0.50}},
+        })
+        periods = [{"startDate": "2026-09-01T00:00:00+02:00", "endDate": "2026-09-01T23:59:59+02:00",
+                    "days": [{"days": [{"day": "09.02.08", "schedules": [{"startTime": "18:00:00"}]}]}]}]
+        reference = datetime.fromisoformat("2026-10-01T12:00:00+02:00")
+        enriched = enrich_recurring_events([base], f"<li periods='{json.dumps(periods)}'></li>", reference)[0]
+        self.assertEqual("recurring", enriched.schedule_type)
+        self.assertIsNone(enriched.next_occurrence_at)
+        self.assertFalse(should_export_event(normalize_export_schedule(enriched.__dict__, reference), reference))
+
+    def test_date_only_event_keeps_its_historical_external_id(self):
+        node = {"@type": "Event", "name": "Club lecture", "startDate": "2026-09-25",
+                "endDate": "2026-12-10", "url": "https://example.org/club",
+                "location": {"name": "Médiathèque", "geo": {"latitude": 43.89, "longitude": -0.50}}}
+        event = event_from_curated(node)
+        self.assertEqual("2026-09-24T22:00:00+00:00", event.start_at)
+        historical = __import__("hashlib").sha256("club lecture|2026-09-25|mediatheque".encode()).hexdigest()[:24]
+        self.assertEqual(historical, event.fingerprint)
+
+    def test_priority_detail_link_is_validated_and_bounded(self):
+        source = {"url": "https://example.org/agenda/", "priority_detail_urls": [
+            "https://example.org/agenda/club-lecture",
+            "https://evil.example/agenda/other",
+            "https://example.org/agenda/other",
+        ]}
+        self.assertEqual(["https://example.org/agenda/club-lecture"], priority_detail_links(source, 1))
+        config = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+        official = next(source for source in config["sources"] if source["name"] == "Mont de Marsan Tourisme")
+        self.assertIn(
+            "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/club-lecture-mont-de-marsan-fr-6758931",
+            priority_detail_links(official, official["max_detail_pages"]),
+        )
 
     def test_builds_validated_curated_event(self):
         event = event_from_curated({

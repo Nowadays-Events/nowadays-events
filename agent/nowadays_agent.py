@@ -305,7 +305,10 @@ def event_from_json(node: dict[str, Any], source_name: str, page_url: str) -> Ev
         status = "active"
     venue = html.unescape(first_text(location.get("name"))).strip()
     address = html.unescape(address_text(location.get("address"))).strip()
-    fingerprint_source = "|".join((normalize(title), start_at[:10], normalize(venue or address)))
+    # Une date sans heure a historiquement servi telle quelle à l'identifiant.
+    # La conversion en minuit local ne doit pas créer un deuxième événement.
+    fingerprint_day = raw_start if date_only_start else start_at[:10]
+    fingerprint_source = "|".join((normalize(title), fingerprint_day, normalize(venue or address)))
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()[:24]
     external_id = hashlib.sha256(f"{event_url}|{fingerprint}".encode("utf-8")).hexdigest()[:32]
     price_type, price_cents, currency = event_price(node)
@@ -513,6 +516,7 @@ def enrich_recurring_events(
     used_discrete_periods = False
     used_weekly_rule = False
     saw_recurrence_span = False
+    latest_period_end: datetime | None = None
 
     def schedule_times(items: Any) -> list[str | None]:
         values = [str(item.get("startTime")) for item in items or [] if isinstance(item, dict) and item.get("startTime")]
@@ -564,6 +568,8 @@ def enrich_recurring_events(
             period_timezone = site_timezone or start.tzinfo or page_timezone
             local_start = start.astimezone(period_timezone)
             local_end = end.astimezone(period_timezone)
+            period_end_utc = local_end.astimezone(timezone.utc)
+            latest_period_end = max(latest_period_end, period_end_utc) if latest_period_end else period_end_utc
             nested_days = [
                 day for group in period.get("days") or [] if isinstance(group, dict)
                 for day in group.get("days") or [] if isinstance(day, dict)
@@ -601,7 +607,7 @@ def enrich_recurring_events(
                         datetime(cursor.year, cursor.month, cursor.day), start_time, period_timezone,
                     )
                 cursor += timedelta(days=1)
-    if not occurrences:
+    if not parsed_occurrences:
         return events
     unique_occurrences = sorted(set(occurrences))
     unique_parsed_occurrences = sorted(set(parsed_occurrences))
@@ -609,13 +615,18 @@ def enrich_recurring_events(
     return [
         replace(
             event,
+            end_at=max(
+                datetime.fromisoformat(event.end_at),
+                latest_period_end or unique_parsed_occurrences[-1],
+                unique_parsed_occurrences[-1],
+            ).isoformat(),
             occurrence_count=max(
                 event.occurrence_count,
                 len(unique_parsed_occurrences),
                 len(unique_occurrences),
                 2 if saw_recurrence_span else 1,
             ),
-            next_occurrence_at=unique_occurrences[0].isoformat(),
+            next_occurrence_at=unique_occurrences[0].isoformat() if unique_occurrences else None,
             schedule_type="recurring",
             occurrence_starts=tuple(value.isoformat() for value in unique_occurrences),
             schedule_reason=schedule_reason,
@@ -1024,6 +1035,20 @@ def detail_links(
         if len(accepted) >= limit:
             break
     return accepted
+
+
+def priority_detail_links(source: dict[str, Any], limit: int) -> list[str]:
+    """Réserve des fiches officielles qui ont quitté les premières pages de l'agenda."""
+    if limit <= 0:
+        return []
+    anchors = "".join(
+        f'<a href="{html.escape(str(url), quote=True)}">fiche</a>'
+        for url in source.get("priority_detail_urls") or []
+    )
+    return detail_links(
+        anchors, source["url"], limit,
+        source.get("detail_path_tokens"), bool(source.get("preserve_detail_query", False)),
+    )
 
 
 def listing_page_url(source: dict[str, Any], page: int) -> str:
@@ -1607,7 +1632,7 @@ def run(
                     except Exception as error:
                         source_failure_count += 1
                         failures.append(f"{source['name']} (liste {list_page}): {error}")
-                source_detail_links: list[str] = []
+                source_detail_links: list[str] = priority_detail_links(source, page_limit)
                 for listing_body in listing_bodies:
                     for detail_url in detail_links(
                         listing_body,

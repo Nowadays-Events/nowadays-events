@@ -49,7 +49,10 @@
       "url": "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/",
       "list_pages": 3,
       "min_candidates": 10,
-      "max_detail_pages": 36
+      "max_detail_pages": 36,
+      "priority_detail_urls": [
+        "https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/club-lecture-mont-de-marsan-fr-6758931"
+      ]
     },
     {
       "name": "Landes d'Armagnac Tourisme — agenda officiel",
