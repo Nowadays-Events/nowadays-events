@@ -16,8 +16,8 @@ android {
         applicationId = "com.nowadays.events"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.3.0"
+        versionCode = 16
+        versionName = "0.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         buildConfigField(
