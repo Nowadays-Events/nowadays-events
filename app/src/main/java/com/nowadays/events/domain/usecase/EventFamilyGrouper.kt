@@ -1,6 +1,7 @@
 package com.nowadays.events.domain.usecase
 
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventScheduleType
 import java.text.Normalizer
 import java.net.URI
 import kotlin.math.*
@@ -11,83 +12,69 @@ data class EventFamily(val main: Event, val children: List<Event>, val sourceUrl
 
 object EventFamilyGrouper {
     fun group(events: List<Event>): List<EventFamily> {
-        val sourceBundles = events.groupBy(Event::sourceUrl).values.map { sourceEvents ->
-            val parent = sourceEvents.maxWithOrNull(
-                compareBy<Event> { it.endsAt.epochSecond - it.startsAt.epochSecond }
-                    .thenBy { it.title.length },
-            ) ?: return@map null
-            Bundle(
-                parent,
-                sourceEvents,
-                parent.endsAt.epochSecond - parent.startsAt.epochSecond >= 36 * 60 * 60,
+        val principals = events.filter(::isPrincipal)
+        val principalGroups = mutableListOf<MutableList<Event>>()
+        principals.forEach { principal ->
+            val matching = principalGroups.filter { group -> group.any { samePrincipal(it, principal) } }
+            if (matching.size == 1) matching.single() += principal
+            else principalGroups += mutableListOf(principal)
+        }
+        val families = principalGroups.map { group ->
+            val main = group.maxWith(compareBy<Event> { durationSeconds(it) }.thenBy { it.shortDescription.length })
+            FamilyBuilder(main, group.filterNot { it.id == main.id }.toMutableList())
+        }
+        val principalIds = principals.map(Event::id).toSet()
+        val standalone = mutableListOf<Event>()
+        events.filterNot { it.id in principalIds }.forEach { candidate ->
+            val matching = families.filter { strongChildRelation(it.main, candidate) }
+            // Un lien ambigu ne retire jamais une fiche de la liste principale.
+            if (matching.size == 1) matching.single().children += candidate else standalone += candidate
+        }
+        return families.map { family ->
+            EventFamily(
+                family.main,
+                family.children.sortedBy(Event::startsAt),
+                (listOf(family.main) + family.children).flatMap(Event::sourceUrls).distinct(),
             )
-        }.filterNotNull().toMutableList()
-
-        val components = mutableListOf<MutableList<Bundle>>()
-        sourceBundles.forEach { bundle ->
-            val matching = components.filter { component -> component.any { sameFestival(it.parent, bundle.parent) } }
-            if (matching.isEmpty()) components += mutableListOf(bundle)
-            else {
-                val target = matching.first()
-                target += bundle
-                matching.drop(1).forEach { other -> target += other; components.remove(other) }
-            }
-        }
-        return components.map { bundles ->
-            val mainCandidates = bundles.filter(Bundle::hasPrincipal).map(Bundle::parent)
-                .ifEmpty { bundles.map(Bundle::parent) }
-            val main = mainCandidates.maxWith(
-                compareBy<Event> { it.endsAt.epochSecond - it.startsAt.epochSecond }
-                    .thenBy { it.fullDescription?.length ?: it.shortDescription.length },
-            )
-            val secondaryParents = bundles.filter(Bundle::hasPrincipal).map(Bundle::parent)
-                .filterNot { it.id == main.id }.map(Event::id).toSet()
-            val children = deduplicateChildren(bundles.flatMap(Bundle::events)
-                .filterNot { it.id == main.id || it.id in secondaryParents }
-                .sortedBy(Event::startsAt))
-            EventFamily(main, children, bundles.flatMap(Bundle::events).flatMap(Event::sourceUrls).distinct())
-        }
+        } + standalone.map { EventFamily(it, emptyList(), it.sourceUrls) }
     }
 
-    private fun deduplicateChildren(events: List<Event>): List<Event> {
-        val result = mutableListOf<Event>()
-        events.forEach { event ->
-            val duplicateIndex = result.indexOfFirst { existing ->
-                abs(existing.startsAt.epochSecond - event.startsAt.epochSecond) <= 16 * 60 * 60 &&
-                    distanceKm(existing, event) <= 2.0 &&
-                    significantTokens(existing.title).intersect(significantTokens(event.title)).isNotEmpty()
-            }
-            if (duplicateIndex < 0) result += event
-            else {
-                val existing = result[duplicateIndex]
-                val existingScore = existing.shortDescription.length + (existing.fullDescription?.length ?: 0)
-                val newScore = event.shortDescription.length + (event.fullDescription?.length ?: 0)
-                if (newScore > existingScore) result[duplicateIndex] = event
-            }
-        }
-        return result
+    private fun isPrincipal(event: Event) =
+        event.scheduleType == EventScheduleType.CONTINUOUS && durationSeconds(event) >= 36 * 60 * 60
+
+    private fun samePrincipal(a: Event, b: Event): Boolean =
+        sourceHost(a) != sourceHost(b) && normalize(a.title) == normalize(b.title) &&
+            titleTokens(a).isNotEmpty() && a.startsAt < b.endsAt && b.startsAt < a.endsAt &&
+            distanceKm(a, b) <= 2.0
+
+    private fun strongChildRelation(parent: Event, child: Event): Boolean {
+        if (child.scheduleType != EventScheduleType.SINGLE || child.id == parent.id) return false
+        if (child.startsAt < parent.startsAt || child.endsAt > parent.endsAt) return false
+        if (distanceKm(parent, child) > 5.0) return false
+        if (!hasProgramCue(child)) return false
+        val shared = titleTokens(parent).intersect(identityTokens(child))
+        return shared.size >= 2 || shared.any { it.length >= 8 }
     }
 
-    private fun sameFestival(a: Event, b: Event): Boolean {
-        if (a.sourceUrl == b.sourceUrl) return true
-        val overlaps = a.startsAt <= b.endsAt && b.startsAt <= a.endsAt
-        if (!overlaps || distanceKm(a, b) > 20.0) return false
-        // Keep only the final URL slug as a weak identity signal. Domain names and
-        // common agenda paths would merge every item published by one tourism office.
-        val common = identityTokens(a).intersect(identityTokens(b))
-        return common.size >= 2 || common.any { it.length >= 8 }
-    }
-
-    private fun identityTokens(event: Event): Set<String> {
+    private fun hasProgramCue(event: Event): Boolean {
         val slug = runCatching { URI(event.sourceUrl).path.substringAfterLast('/') }.getOrDefault("")
-        return significantTokens("${event.title} $slug")
+        return normalize("${event.title} $slug").split(' ').any { it in PROGRAM_CUES }
     }
+
+    private fun titleTokens(event: Event) = significantTokens(event.title)
+    private fun identityTokens(event: Event) = titleTokens(event) + sourceSlug(event)
+    private fun sourceSlug(event: Event): Set<String> = significantTokens(
+        runCatching { URI(event.sourceUrl).path.substringAfterLast('/') }.getOrDefault(""),
+    )
+    private fun sourceHost(event: Event): String = runCatching { URI(event.sourceUrl).host.orEmpty() }.getOrDefault("")
 
     private fun significantTokens(value: String): Set<String> = normalize(value).split(' ')
         .filter { it.length >= 4 && it !in STOP_WORDS && it.toIntOrNull() == null }.toSet()
 
     private fun normalize(value: String): String = Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
         .replace(Regex("\\p{M}+"), "").replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    private fun durationSeconds(event: Event) = event.endsAt.epochSecond - event.startsAt.epochSecond
 
     private fun distanceKm(a: Event, b: Event): Double {
         val lat1 = Math.toRadians(a.latitude)
@@ -98,10 +85,14 @@ object EventFamilyGrouper {
         return 6371.0 * 2 * asin(sqrt(h))
     }
 
-    private data class Bundle(val parent: Event, val events: List<Event>, val hasPrincipal: Boolean)
+    private data class FamilyBuilder(val main: Event, val children: MutableList<Event>)
 
     private val STOP_WORDS = setOf(
         "avec", "dans", "pour", "sans", "sous", "entre", "programme", "complet", "fetes",
         "festival", "edition", "jours", "mont", "marsan", "juillet", "cette", "tout",
+        "agenda", "evenements",
+    )
+    private val PROGRAM_CUES = setOf(
+        "programme", "ouverture", "journee", "concert", "cloture", "spectacle", "animation",
     )
 }

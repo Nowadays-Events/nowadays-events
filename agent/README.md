@@ -136,3 +136,14 @@ reste soumis au même filtre géographique et compte comme couverture de Dax.
 Avant chaque publication, le nouveau flux est comparé au précédent. Une chute
 de plus de 50 % bloque le déploiement : l’application conserve ainsi son dernier
 flux valide lorsqu’une collecte connaît une panne générale ou un défaut de parsing.
+
+## Incohérence de calendrier à surveiller
+
+Au 1er octobre 2026, la fiche officielle « Les jeudis du bricolage »
+(`https://www.montdemarsan-tourisme.com/preparer-mon-sejour/agenda/les-jeudis-du-bricolage-mont-de-marsan-fr-6819511`)
+contient une période du 29 octobre au 29 novembre dont les données Tourinsoft
+indiquent `_isEveryDay=true` et les sept jours de la semaine. Cette période
+contredit le titre de la fiche. Le collecteur respecte les jours structurés :
+il ne déduit pas les jeudis à partir du titre et n'invente pas de calendrier.
+Une future alerte de supervision sur les contradictions entre titre et règle
+hebdomadaire pourra soumettre ce type de fiche à une vérification humaine.
