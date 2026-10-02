@@ -1,6 +1,7 @@
 package com.nowadays.events.domain.usecase
 
 import com.nowadays.events.domain.model.*
+import com.nowadays.events.map.EventGeoJsonMapper
 import com.nowadays.events.map.MapSelectionPolicy
 import java.time.Instant
 import org.junit.Assert.assertEquals
@@ -30,6 +31,11 @@ class EventFamilyGrouperTest {
         val families = EventFamilyGrouper.group(listOf(soiree, jeudis))
         assertEquals(setOf(soiree.id, jeudis.id), families.map { it.main.id }.toSet())
         assertEquals(0, families.sumOf { it.children.size })
+        assertEquals(
+            setOf(soiree.id, jeudis.id),
+            EventGeoJsonMapper.map(families.map { it.main }).features().orEmpty()
+                .map { it.getStringProperty(EventGeoJsonMapper.EVENT_ID_PROPERTY) }.toSet(),
+        )
     }
 
     @Test fun `generic Grand Dax agenda URL never creates an artificial family`() {
