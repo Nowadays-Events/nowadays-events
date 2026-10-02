@@ -3,9 +3,13 @@ package com.nowadays.events
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -40,6 +44,35 @@ class CompactEventListInstrumentedTest {
         compose.onNodeWithText("ANNULÉ", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("event-row-cancelled").performClick()
         assertTrue(clicked)
+    }
+
+    @Test fun recurringRowCanBeReducedExpandedAndStillOpensItsDetail() {
+        var opened = false
+        var collapsed by mutableStateOf(false)
+        val event = event("repair", "Repair Café").copy(
+            scheduleType = EventScheduleType.RECURRING,
+            nextOccurrenceAt = fixedNow.plusSeconds(86_400),
+            occurrenceCount = 4,
+        )
+        compose.setContent {
+            NowadaysTheme {
+                CompactEventRow(
+                    NearbyListItem(event, 2.4), fixedNow,
+                    isCollapsed = collapsed,
+                    onToggleCollapsed = { collapsed = !collapsed },
+                    onOpenEvent = { opened = true },
+                )
+            }
+        }
+        compose.onNodeWithTag("event-collapse-repair").performClick()
+        compose.onNodeWithText("Repair Café").assertIsDisplayed()
+        compose.onNodeWithTag("event-distance-repair", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Prochaine date", substring = true).assertDoesNotExist()
+        assertTrue(!opened)
+        compose.onNodeWithTag("event-collapse-repair").performClick()
+        compose.onNodeWithText("Prochaine date", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("event-row-repair").performClick()
+        assertTrue(opened)
     }
 
     @Test fun mapPreviewIsVisibleClickableAndHasNoGesturesSurface() {

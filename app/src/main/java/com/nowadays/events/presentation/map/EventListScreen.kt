@@ -55,6 +55,9 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferences = remember { context.getSharedPreferences("event_list", Context.MODE_PRIVATE) }
+    var collapsedEventIds by remember {
+        mutableStateOf(preferences.getStringSet("collapsed_event_ids", emptySet()).orEmpty().toSet())
+    }
     var reference by remember { mutableStateOf(loadReference(preferences)) }
     var radiusKm by rememberSaveable { mutableIntStateOf(preferences.getInt("radius", 30)) }
     var showCalendar by rememberSaveable { mutableStateOf(false) }
@@ -116,7 +119,21 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
                 else -> LazyColumn(Modifier.fillMaxSize().testTag("event-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->
                         stickyHeader { Text(section.title, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
-                        items(section.events, key = { it.event.id }) { CompactEventRow(it, onOpenEvent = onOpenEvent) }
+                        items(section.events, key = { it.event.id }) { item ->
+                            CompactEventRow(
+                                item = item,
+                                isCollapsed = item.event.id in collapsedEventIds,
+                                onToggleCollapsed = {
+                                    collapsedEventIds = if (item.event.id in collapsedEventIds) {
+                                        collapsedEventIds - item.event.id
+                                    } else {
+                                        collapsedEventIds + item.event.id
+                                    }
+                                    preferences.edit().putStringSet("collapsed_event_ids", collapsedEventIds).apply()
+                                },
+                                onOpenEvent = onOpenEvent,
+                            )
+                        }
                     }
                 }
             }
@@ -143,17 +160,27 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
 }
 
 @Composable
-internal fun CompactEventRow(item: NearbyListItem, now: Instant = Instant.now(), onOpenEvent: (Event) -> Unit) {
+internal fun CompactEventRow(
+    item: NearbyListItem,
+    now: Instant = Instant.now(),
+    isCollapsed: Boolean = false,
+    onToggleCollapsed: () -> Unit = {},
+    onOpenEvent: (Event) -> Unit,
+) {
     val event = item.event
     val status = when (event.status) { EventStatus.CANCELLED -> "ANNULÉ · "; EventStatus.POSTPONED -> "REPORTÉ · "; else -> "" }
-    Surface(Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { onOpenEvent(event) }.testTag("event-row-${event.id}"), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.errorContainer.copy(alpha = .22f) else MaterialTheme.colorScheme.surface) {
+    Surface(Modifier.fillMaxWidth().heightIn(min = if (isCollapsed) 52.dp else 72.dp).clickable { onOpenEvent(event) }.testTag("event-row-${event.id}"), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.errorContainer.copy(alpha = .22f) else MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (event.status == EventStatus.CANCELLED) "✕" else CompactEventListPolicy.icon(event.category), style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(36.dp), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            if (!isCollapsed) Text(if (event.status == EventStatus.CANCELLED) "✕" else CompactEventListPolicy.icon(event.category), style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(36.dp), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("$status${eventScheduleLabel(event, now = now)} · ${shortPlace(event)}", style = MaterialTheme.typography.bodySmall, color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!isCollapsed) Text("$status${eventScheduleLabel(event, now = now)} · ${shortPlace(event)}", style = MaterialTheme.typography.bodySmall, color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.width(8.dp)); Text(distanceLabel(item.distanceKm), style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.testTag("event-distance-${event.id}")); Icon(Icons.Default.ChevronRight, "Ouvrir la fiche", Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(distanceLabel(item.distanceKm), style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.testTag("event-distance-${event.id}"))
+            IconButton(onClick = onToggleCollapsed, modifier = Modifier.testTag("event-collapse-${event.id}")) {
+                Icon(if (isCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess, if (isCollapsed) "Développer ${event.title}" else "Réduire ${event.title}")
+            }
         }
     }
     HorizontalDivider(Modifier.padding(start = 52.dp))
