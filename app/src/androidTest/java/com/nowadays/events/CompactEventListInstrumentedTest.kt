@@ -1,5 +1,6 @@
 package com.nowadays.events
 
+import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,12 +15,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import com.nowadays.events.domain.model.*
 import com.nowadays.events.presentation.detail.EventDetailContent
 import com.nowadays.events.presentation.map.CompactEventRow
 import com.nowadays.events.presentation.map.NearbyListItem
+import com.nowadays.events.presentation.map.loadCollapsedEventIds
+import com.nowadays.events.presentation.map.saveCollapsedEventIds
 import com.nowadays.events.presentation.theme.NowadaysTheme
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -72,6 +77,20 @@ class CompactEventListInstrumentedTest {
         compose.onNodeWithText("Prochaine date", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("event-row-repair").performClick()
         assertTrue(opened)
+    }
+
+    @Test fun collapsedRowsAreStoredForAFreshListState() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preferences = context.getSharedPreferences("collapsed-event-ids-test", Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        try {
+            saveCollapsedEventIds(preferences, setOf("repair", "cancelled"))
+
+            val freshlyLoaded = context.getSharedPreferences("collapsed-event-ids-test", Context.MODE_PRIVATE)
+            assertEquals(setOf("repair", "cancelled"), loadCollapsedEventIds(freshlyLoaded))
+        } finally {
+            preferences.edit().clear().commit()
+        }
     }
 
     @Test fun mapPreviewIsVisibleClickableAndHasNoGesturesSurface() {

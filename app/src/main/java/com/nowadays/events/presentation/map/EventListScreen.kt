@@ -56,7 +56,7 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
     val scope = rememberCoroutineScope()
     val preferences = remember { context.getSharedPreferences("event_list", Context.MODE_PRIVATE) }
     var collapsedEventIds by remember {
-        mutableStateOf(preferences.getStringSet("collapsed_event_ids", emptySet()).orEmpty().toSet())
+        mutableStateOf(loadCollapsedEventIds(preferences))
     }
     var reference by remember { mutableStateOf(loadReference(preferences)) }
     var radiusKm by rememberSaveable { mutableIntStateOf(preferences.getInt("radius", 30)) }
@@ -129,7 +129,7 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
                                     } else {
                                         collapsedEventIds + item.event.id
                                     }
-                                    preferences.edit().putStringSet("collapsed_event_ids", collapsedEventIds).apply()
+                                    saveCollapsedEventIds(preferences, collapsedEventIds)
                                 },
                                 onOpenEvent = onOpenEvent,
                             )
@@ -223,6 +223,8 @@ private fun periodLabel(filter: TimeFilter) = when (filter) { TimeFilter.TODAY -
 private fun distanceLabel(value: Double) = if (value < 10) "%.1f km".format(value) else "%.0f km".format(value)
 private fun categoryLabel(value: EventCategory) = when (value) { EventCategory.CULTURE -> "Culture"; EventCategory.MUSIC -> "Musique"; EventCategory.SPORT -> "Sport"; EventCategory.FOOD -> "Gastronomie"; EventCategory.FAMILY -> "Famille"; EventCategory.COMMUNITY -> "Vie locale"; EventCategory.TECHNOLOGY -> "Technologie" }
 private fun shortPlace(event: Event) = event.venueName.ifBlank { event.address }.substringBefore(',').ifBlank { "Lieu à confirmer" }
+internal fun loadCollapsedEventIds(prefs: android.content.SharedPreferences): Set<String> = prefs.getStringSet("collapsed_event_ids", emptySet()).orEmpty().toSet()
+internal fun saveCollapsedEventIds(prefs: android.content.SharedPreferences, ids: Set<String>) { prefs.edit().putStringSet("collapsed_event_ids", ids).apply() }
 private fun loadReference(prefs: android.content.SharedPreferences) = ReferencePlace(prefs.getString("reference_label", montDeMarsan.label) ?: montDeMarsan.label, java.lang.Double.longBitsToDouble(prefs.getLong("reference_lat", java.lang.Double.doubleToLongBits(montDeMarsan.latitude))), java.lang.Double.longBitsToDouble(prefs.getLong("reference_lon", java.lang.Double.doubleToLongBits(montDeMarsan.longitude))), prefs.getString("reference_kind", "city") ?: "city")
 private fun saveReference(prefs: android.content.SharedPreferences, place: ReferencePlace) { prefs.edit().putString("reference_label", place.label).putLong("reference_lat", java.lang.Double.doubleToRawLongBits(place.latitude)).putLong("reference_lon", java.lang.Double.doubleToRawLongBits(place.longitude)).putString("reference_kind", place.kind).apply(); if (place.kind != "gps") { val entries = (listOf(place) + loadRecentPlaces(prefs)).distinctBy { "${it.latitude},${it.longitude}" }.take(3); prefs.edit().putString("recent_places", ReferencePlaceCodec.encode(entries)).apply() } }
 private fun loadRecentPlaces(prefs: android.content.SharedPreferences): List<ReferencePlace> = ReferencePlaceCodec.decode(prefs.getString("recent_places", "").orEmpty())
