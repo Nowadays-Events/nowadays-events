@@ -232,7 +232,7 @@ fun MapScreen(
                 onClick = onNavigateBack,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 76.dp).testTag("map-navigation-back"),
             ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour à la fiche") }
-            FilterBar(
+            if (panelState != MapHomePanelState.EXPANDED) FilterBar(
                 selected = state.selectedFilter,
                 customStartDate = state.customStartDate,
                 customEndDate = state.customEndDate,
