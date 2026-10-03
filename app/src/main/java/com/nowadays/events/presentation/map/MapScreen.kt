@@ -167,7 +167,10 @@ fun MapScreen(
     }
     Scaffold(
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End) {
+            if (panelState != MapHomePanelState.EXPANDED) Column(
+                modifier = Modifier.padding(bottom = if (panelState == MapHomePanelState.PREVIEW) 188.dp else 76.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         pendingNearbyRequest = true
