@@ -41,6 +41,7 @@ import com.nowadays.events.domain.usecase.NearbyEvents
 import com.nowadays.events.presentation.eventScheduleLabel
 import com.nowadays.events.presentation.form.LocationPickerDialog
 import java.time.Instant
+import java.time.Clock
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
@@ -112,14 +113,13 @@ internal fun EventListScreen(
             actions = {
                 IconButton({ showSearch = !showSearch }, Modifier.testTag("toggle-search")) { Icon(Icons.Default.Search, "Rechercher") }
                 IconButton({ showFilters = true }, Modifier.testTag("open-filters")) { Icon(Icons.Default.Tune, "Filtres") }
-                IconButton(onShowMap, Modifier.testTag("open-map")) { Icon(Icons.Default.Map, "Afficher la carte") }
             },
         )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (showSearch) OutlinedTextField(state.searchQuery, viewModel::setSearchQuery, Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("event-search"), placeholder = { Text("Rechercher un événement") }, singleLine = true)
             CompactPeriodBar(state.selectedFilter, viewModel::selectFilter) { showCalendar = true }
-            Text(CompactEventListPolicy.introduction(nearby.size, radiusKm, state.selectedFilter), Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("result-introduction"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(searchHorizonLabel(state.selectedFilter, state.customEndDate, Clock.systemUTC()), Modifier.padding(horizontal = 16.dp, vertical = 3.dp).testTag("result-introduction"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("${compactSyncStatusLabel(state.syncState, state.events.isNotEmpty(), state.syncDataPotentiallyStale)} · v${BuildConfig.VERSION_NAME}", Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("compact-sync-state"), style = MaterialTheme.typography.labelSmall, color = if (state.syncState.status in setOf(SyncStatus.FAILED_EMPTY, SyncStatus.FAILED_WITH_CACHE)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             when {
                 state.isLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -178,10 +178,15 @@ internal fun CompactEventRow(
     val event = item.event
     val status = when (event.status) { EventStatus.CANCELLED -> "ANNULÉ · "; EventStatus.POSTPONED -> "REPORTÉ · "; else -> "" }
     Surface(Modifier.fillMaxWidth().heightIn(min = if (isCollapsed) 52.dp else 72.dp).clickable { onOpenEvent(event) }.testTag("event-row-${event.id}"), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.errorContainer.copy(alpha = .22f) else MaterialTheme.colorScheme.surface) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (!isCollapsed) Text(if (event.status == EventStatus.CANCELLED) "✕" else CompactEventListPolicy.icon(event.category), style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(36.dp), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (isCollapsed) 0.dp else 9.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!isCollapsed) Icon(
+                if (event.status == EventStatus.CANCELLED) Icons.Default.Close else categoryPictogram(event.category),
+                contentDescription = if (event.status == EventStatus.CANCELLED) "Annulé" else categoryLabel(event.category),
+                modifier = Modifier.padding(end = 12.dp).size(20.dp),
+                tint = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = if (isCollapsed) 1 else 2, overflow = TextOverflow.Ellipsis)
                 if (!isCollapsed) Text("$status${eventScheduleLabel(event, now = now)} · ${shortPlace(event)}", style = MaterialTheme.typography.bodySmall, color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(8.dp))
@@ -194,10 +199,21 @@ internal fun CompactEventRow(
     HorizontalDivider(Modifier.padding(start = 52.dp))
 }
 
+// COMMUNITY also receives unknown source categories in legacy data: use a neutral symbol.
+private fun categoryPictogram(category: EventCategory) = when (category) {
+    EventCategory.CULTURE -> Icons.Default.TheaterComedy
+    EventCategory.MUSIC -> Icons.Default.MusicNote
+    EventCategory.SPORT -> Icons.Default.Sports
+    EventCategory.FOOD -> Icons.Default.Restaurant
+    EventCategory.FAMILY -> Icons.Default.FamilyRestroom
+    EventCategory.TECHNOLOGY -> Icons.Default.Computer
+    EventCategory.COMMUNITY -> Icons.Default.Event
+}
+
 @Composable private fun CompactPeriodBar(selected: TimeFilter, onSelect: (TimeFilter) -> Unit, onDates: () -> Unit) {
     LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp).testTag("period-filter-bar")) {
-        items(listOf(TimeFilter.TODAY to "Aujourd’hui", TimeFilter.TOMORROW to "Demain", TimeFilter.NEXT_7_DAYS to "7 jours", TimeFilter.THIS_WEEKEND to "Week-end")) { (filter, label) -> FilterChip(selected == filter, { onSelect(filter) }, { Text(if (selected == filter) "✓ $label" else label) }, Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp).testTag("period-${filter.name.lowercase()}")) }
-        item { FilterChip(selected == TimeFilter.CUSTOM, onDates, { Text(if (selected == TimeFilter.CUSTOM) "✓ Dates" else "Dates") }, Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp).testTag("period-custom")) }
+        items(listOf(TimeFilter.TODAY to "Aujourd’hui", TimeFilter.TOMORROW to "Demain", TimeFilter.NEXT_7_DAYS to "7 jours", TimeFilter.THIS_WEEKEND to "Week-end")) { (filter, label) -> FilterChip(selected == filter, { onSelect(filter) }, { Text(if (selected == filter) "✓ $label" else label) }, Modifier.padding(horizontal = 3.dp).testTag("period-${filter.name.lowercase()}")) }
+        item { FilterChip(selected == TimeFilter.CUSTOM, onDates, { Text(if (selected == TimeFilter.CUSTOM) "✓ Dates" else "Dates") }, Modifier.padding(horizontal = 3.dp).testTag("period-custom")) }
     }
 }
 

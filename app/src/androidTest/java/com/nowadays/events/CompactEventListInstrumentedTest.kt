@@ -33,6 +33,21 @@ class CompactEventListInstrumentedTest {
     @get:Rule val compose = createComposeRule()
     private val fixedNow = Instant.parse("2026-09-26T10:00:00Z")
 
+    @Test fun collapsedRowIsClearlyShorterAndKeepsItsTouchTarget() {
+        var collapsed by mutableStateOf(false)
+        val event = event("height", "Repair Café")
+        compose.setContent { NowadaysTheme {
+            CompactEventRow(NearbyListItem(event, 2.4), fixedNow,
+                isCollapsed = collapsed, onToggleCollapsed = { collapsed = !collapsed }) {}
+        } }
+        val expandedHeight = compose.onNodeWithTag("event-row-height").fetchSemanticsNode().boundsInRoot.height
+        compose.onNodeWithTag("event-collapse-height").performClick()
+        val collapsedHeight = compose.onNodeWithTag("event-row-height").fetchSemanticsNode().boundsInRoot.height
+        val touchHeight = compose.onNodeWithTag("event-collapse-height").fetchSemanticsNode().boundsInRoot.height
+        assertTrue("Collapsed row must be at least 20% shorter", collapsedHeight <= expandedHeight * .8f)
+        assertTrue("The action must retain its full touch target", touchHeight <= collapsedHeight)
+    }
+
     @Test fun compactRowKeepsLongTitleDistanceAndUnknownTimeReadable() {
         val event = event("long", "Un titre volontairement très long qui doit rester lisible sur deux lignes", EventStatus.ACTIVE, EventTimePrecision.UNKNOWN)
         compose.setContent { NowadaysTheme { CompactEventRow(NearbyListItem(event, 12.4), fixedNow) {} } }

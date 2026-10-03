@@ -171,7 +171,7 @@ fun MapScreen(
                 modifier = Modifier.padding(bottom = if (panelState == MapHomePanelState.PREVIEW) 188.dp else 76.dp),
                 horizontalAlignment = Alignment.End,
             ) {
-                ExtendedFloatingActionButton(
+                SmallFloatingActionButton(
                     onClick = {
                         pendingNearbyRequest = true
                         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -181,18 +181,17 @@ fun MapScreen(
                             pendingNearbyRequest = false
                         } else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
                     },
-                    icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
-                    text = { Text("Autour de moi") },
-                    modifier = Modifier.testTag("nearby-action"),
-                )
-                FloatingActionButton(onClick = {
+                    containerColor = if (showNearby) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(48.dp).testTag("nearby-action"),
+                ) { Icon(Icons.Default.MyLocation, contentDescription = if (showNearby) "Autour de moi, actif" else "Événements autour de moi") }
+                SmallFloatingActionButton(onClick = {
                     val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (granted) recenterOnLastKnownLocation(context, controller)
                     else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
-                }, modifier = Modifier.padding(top = 10.dp)) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Recentrer la carte")
+                }, modifier = Modifier.padding(top = 6.dp).size(48.dp)) {
+                    Icon(Icons.Default.CenterFocusStrong, contentDescription = "Recentrer la carte")
                 }
-                FloatingActionButton(onClick = onAddEvent, modifier = Modifier.padding(top = 12.dp)) {
+                SmallFloatingActionButton(onClick = onAddEvent, modifier = Modifier.padding(top = 6.dp).size(48.dp)) {
                     Icon(Icons.Default.Add, contentDescription = "Ajouter un événement")
                 }
             }
@@ -594,7 +593,7 @@ internal fun FilterBar(
                     label = { Text(if (isSelected) "✓ $label" else label) },
                     colors = periodChipColors(isSelected),
                     elevation = AssistChipDefaults.assistChipElevation(elevation = 2.dp),
-                    modifier = Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp)
+                    modifier = Modifier.padding(horizontal = 3.dp)
                         .testTag("period-${filter.name.lowercase()}"),
                 )
             }
@@ -611,7 +610,7 @@ internal fun FilterBar(
                     label = { Text(if (isSelected) "✓ $customLabel" else customLabel) },
                     colors = periodChipColors(isSelected),
                     elevation = AssistChipDefaults.assistChipElevation(elevation = 2.dp),
-                    modifier = Modifier.padding(horizontal = 3.dp).heightIn(min = 48.dp)
+                    modifier = Modifier.padding(horizontal = 3.dp)
                         .testTag("period-calendar"),
                 )
             }
