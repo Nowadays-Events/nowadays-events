@@ -1,5 +1,11 @@
 package com.nowadays.events
 
+import android.content.Context
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.pinch
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertTrue
+
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -16,6 +22,22 @@ import org.junit.Test
 /** Minimal UI integration. Map interaction decisions are covered by deterministic JVM tests. */
 class MapScreenInstrumentedTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test fun twoFingerZoomChangesCameraWithoutOpeningTheList() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val camera = context.getSharedPreferences("map_camera", Context.MODE_PRIVATE)
+        compose.waitUntil(30_000) { camera.contains("zoom") }
+        val before = camera.getFloat("zoom", 11.5f)
+        compose.onNodeWithTag("event-map").performTouchInput {
+            val focus = Offset(center.x, size.height * .4f)
+            pinch(start0 = focus - Offset(35f, 0f), start1 = focus + Offset(35f, 0f),
+                end0 = focus - Offset(135f, 0f), end1 = focus + Offset(135f, 0f), durationMillis = 450)
+        }
+        compose.waitUntil(10_000) { camera.getFloat("zoom", before) > before + .2f }
+        assertTrue(camera.getFloat("zoom", before) > before)
+        compose.onNodeWithTag("show-list").assertIsDisplayed()
+        compose.onNodeWithTag("preview-open-list").assertDoesNotExist()
+    }
 
     private fun openList() {
         compose.onNodeWithTag("show-list").performClick()
