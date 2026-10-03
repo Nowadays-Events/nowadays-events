@@ -29,7 +29,7 @@ class MapScreenInstrumentedTest {
         compose.waitUntil(30_000) { camera.contains("zoom") }
         val before = camera.getFloat("zoom", 11.5f)
         compose.onNodeWithTag("event-map").performTouchInput {
-            val focus = Offset(center.x, size.height * .4f)
+            val focus = Offset(center.x, center.y * .8f)
             pinch(start0 = focus - Offset(35f, 0f), start1 = focus + Offset(35f, 0f),
                 end0 = focus - Offset(135f, 0f), end1 = focus + Offset(135f, 0f), durationMillis = 450)
         }
