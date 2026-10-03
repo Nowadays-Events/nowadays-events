@@ -50,7 +50,15 @@ private val montDeMarsan = ReferencePlace("Mont-de-Marsan", 43.8904, -0.5007)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewModel: MapViewModel = hiltViewModel()) {
+internal fun EventListScreen(
+    onShowMap: () -> Unit,
+    onOpenEvent: (Event) -> Unit,
+    modifier: Modifier = Modifier,
+    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
+    onReferenceChanged: (ReferencePlace) -> Unit = {},
+    onRadiusChanged: (Int) -> Unit = {},
+    viewModel: MapViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -70,11 +78,11 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
     var citySuggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
     var citySearchFailed by remember { mutableStateOf(false) }
     val locationSearch: LocationSearcher = remember { LocationSearchService(context.applicationContext) }
-    val listState = rememberLazyListState()
 
     fun selectPlace(place: ReferencePlace) {
         reference = place
         saveReference(preferences, place)
+        onReferenceChanged(place)
         showPlaces = false
         locationMessage = null
     }
@@ -90,7 +98,7 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
     val listItems = remember(nearby) { nearby.map { NearbyListItem(it.event, it.distanceKm) } }
     val sections = remember(listItems, state.selectedFilter) { CompactEventListPolicy.sections(listItems, state.selectedFilter, Instant.now(), ZoneId.systemDefault()) }
 
-    Scaffold(topBar = {
+    Scaffold(modifier = modifier, topBar = {
         TopAppBar(
             title = {
                 Column(Modifier.clickable { showPlaces = true }.testTag("reference-place-button")) {
@@ -141,7 +149,7 @@ fun EventListScreen(onShowMap: () -> Unit, onOpenEvent: (Event) -> Unit, viewMod
     }
 
     if (showFilters) ModalBottomSheet(onDismissRequest = { showFilters = false }) {
-        FilterSheet(radiusKm, state.selectedCategory, state.priceFilter, { radiusKm = it; preferences.edit().putInt("radius", it).apply() }, viewModel::selectCategory, viewModel::selectPriceFilter, viewModel::retrySync)
+        FilterSheet(radiusKm, state.selectedCategory, state.priceFilter, { radiusKm = it; preferences.edit().putInt("radius", it).apply(); onRadiusChanged(it) }, viewModel::selectCategory, viewModel::selectPriceFilter, viewModel::retrySync)
     }
     if (showPlaces) ModalBottomSheet(onDismissRequest = { showPlaces = false }) {
         PlaceSheet(reference, loadRecentPlaces(preferences), cityQuery, citySuggestions, citySearchFailed,
@@ -225,7 +233,7 @@ private fun categoryLabel(value: EventCategory) = when (value) { EventCategory.C
 private fun shortPlace(event: Event) = event.venueName.ifBlank { event.address }.substringBefore(',').ifBlank { "Lieu à confirmer" }
 internal fun loadCollapsedEventIds(prefs: android.content.SharedPreferences): Set<String> = prefs.getStringSet("collapsed_event_ids", emptySet()).orEmpty().toSet()
 internal fun saveCollapsedEventIds(prefs: android.content.SharedPreferences, ids: Set<String>) { prefs.edit().putStringSet("collapsed_event_ids", ids).apply() }
-private fun loadReference(prefs: android.content.SharedPreferences) = ReferencePlace(prefs.getString("reference_label", montDeMarsan.label) ?: montDeMarsan.label, java.lang.Double.longBitsToDouble(prefs.getLong("reference_lat", java.lang.Double.doubleToLongBits(montDeMarsan.latitude))), java.lang.Double.longBitsToDouble(prefs.getLong("reference_lon", java.lang.Double.doubleToLongBits(montDeMarsan.longitude))), prefs.getString("reference_kind", "city") ?: "city")
+internal fun loadReference(prefs: android.content.SharedPreferences) = ReferencePlace(prefs.getString("reference_label", montDeMarsan.label) ?: montDeMarsan.label, java.lang.Double.longBitsToDouble(prefs.getLong("reference_lat", java.lang.Double.doubleToLongBits(montDeMarsan.latitude))), java.lang.Double.longBitsToDouble(prefs.getLong("reference_lon", java.lang.Double.doubleToLongBits(montDeMarsan.longitude))), prefs.getString("reference_kind", "city") ?: "city")
 private fun saveReference(prefs: android.content.SharedPreferences, place: ReferencePlace) { prefs.edit().putString("reference_label", place.label).putLong("reference_lat", java.lang.Double.doubleToRawLongBits(place.latitude)).putLong("reference_lon", java.lang.Double.doubleToRawLongBits(place.longitude)).putString("reference_kind", place.kind).apply(); if (place.kind != "gps") { val entries = (listOf(place) + loadRecentPlaces(prefs)).distinctBy { "${it.latitude},${it.longitude}" }.take(3); prefs.edit().putString("recent_places", ReferencePlaceCodec.encode(entries)).apply() } }
 private fun loadRecentPlaces(prefs: android.content.SharedPreferences): List<ReferencePlace> = ReferencePlaceCodec.decode(prefs.getString("recent_places", "").orEmpty())
 private fun lastListLocation(context: Context): Pair<Double, Double>? { if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null; val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager; return manager.getProviders(true).mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }?.let { it.latitude to it.longitude } }

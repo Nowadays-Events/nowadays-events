@@ -9,14 +9,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +31,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DatePickerDialog
@@ -50,10 +56,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -64,6 +72,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -89,7 +99,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MapScreen(
     onAddEvent: () -> Unit,
-    onBackToList: () -> Unit = {},
+    onOpenEvent: (com.nowadays.events.domain.model.Event) -> Unit = {},
+    onNavigateBack: (() -> Unit)? = null,
     focusLatitude: Double? = null,
     focusLongitude: Double? = null,
     focusEventId: String? = null,
@@ -104,19 +115,19 @@ fun MapScreen(
     var nearbyLocation by remember { mutableStateOf<LatLng?>(null) }
     var nearbyRadiusKm by remember { mutableStateOf(15) }
     var pendingNearbyRequest by remember { mutableStateOf(false) }
+    var panelState by rememberSaveable { mutableStateOf(MapHomePanelState.CLOSED) }
     var focusApplied by remember(focusLatitude, focusLongitude, focusEventId) { mutableStateOf(false) }
     val context = LocalContext.current
+    val listPreferences = remember { context.getSharedPreferences("event_list", Context.MODE_PRIVATE) }
+    var referencePlace by remember { mutableStateOf(loadReference(listPreferences)) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val cameraPreferences = remember { context.getSharedPreferences("map_camera", Context.MODE_PRIVATE) }
     val controller = remember {
-        val hasSavedCamera = cameraPreferences.contains("latitude")
         EventMapController(
             onEventSelected = viewModel::selectEvent,
             onClusterExpanded = viewModel::expandCluster,
             onBackgroundClick = viewModel::clearMapSelection,
-            initialCenter = if (hasSavedCamera) LatLng(
-                cameraPreferences.getFloat("latitude", 48.8566f).toDouble(),
-                cameraPreferences.getFloat("longitude", 2.3522f).toDouble(),
-            ) else LatLng(48.8566, 2.3522),
+            initialCenter = LatLng(referencePlace.latitude, referencePlace.longitude),
             initialZoom = cameraPreferences.getFloat("zoom", 11.5f).toDouble(),
             onCameraChanged = { target, zoom -> cameraPreferences.edit()
                 .putFloat("latitude", target.latitude.toFloat()).putFloat("longitude", target.longitude.toFloat())
@@ -142,7 +153,7 @@ fun MapScreen(
         if (!focusApplied && focusLatitude != null && focusLongitude != null && (focusEventId == null || state.nearbyEvents.any { it.id == focusEventId })) {
             focusApplied = true
             viewModel.selectFilter(TimeFilter.ALL_FUTURE)
-            controller.recenter(LatLng(focusLatitude, focusLongitude), 14.0)
+            controller.recenter(LatLng(focusLatitude, focusLongitude), 13.0)
             focusEventId?.takeIf { id -> state.nearbyEvents.any { it.id == id } }?.let { id ->
                 if (openFocusedEventDetail) viewModel.openNearbyEvent(id) else viewModel.highlightEvent(id)
             }
@@ -195,7 +206,7 @@ fun MapScreen(
                 selectedEventId = state.selectedEvent?.id ?: state.highlightedEventId,
                 onEventSelected = viewModel::selectEvent,
                 controller = controller,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("event-map"),
             )
             Column(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 6.dp),
@@ -214,10 +225,10 @@ fun MapScreen(
                     )
                 }
             }
-            SmallFloatingActionButton(
-                onClick = onBackToList,
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 76.dp).testTag("back-to-list"),
-            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour") }
+            if (onNavigateBack != null) SmallFloatingActionButton(
+                onClick = onNavigateBack,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 76.dp).testTag("map-navigation-back"),
+            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Retour à la fiche") }
             FilterBar(
                 selected = state.selectedFilter,
                 customStartDate = state.customStartDate,
@@ -303,6 +314,96 @@ fun MapScreen(
                     },
                     onDismiss = { showNearby = false },
                 )
+            }
+            MapHomePanel(
+                state = panelState,
+                eventCount = state.events.size,
+                onStateChanged = { panelState = it },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                EventListScreen(
+                    onShowMap = { panelState = MapHomePanelState.CLOSED },
+                    onOpenEvent = onOpenEvent,
+                    listState = listState,
+                    onReferenceChanged = { place ->
+                        referencePlace = place
+                        controller.recenter(LatLng(place.latitude, place.longitude), 11.5)
+                    },
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MapHomePanel(
+    state: MapHomePanelState,
+    eventCount: Int,
+    onStateChanged: (MapHomePanelState) -> Unit,
+    modifier: Modifier = Modifier,
+    expandedContent: @Composable () -> Unit,
+) {
+    val configuration = LocalConfiguration.current
+    val targetHeight = when (state) {
+        MapHomePanelState.CLOSED -> 76.dp
+        MapHomePanelState.PREVIEW -> 188.dp
+        MapHomePanelState.EXPANDED -> (configuration.screenHeightDp * .88f).dp
+    }
+    val height by animateDpAsState(targetHeight, label = "map list panel height")
+    var dragDistance by remember { mutableStateOf(0f) }
+    Surface(
+        modifier = modifier.fillMaxWidth().height(height).testTag("map-list-panel"),
+        shape = MaterialTheme.shapes.extraLarge,
+        tonalElevation = 5.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth().height(76.dp)
+                    .testTag("map-list-handle")
+                    .pointerInput(state) {
+                        detectVerticalDragGestures(
+                            onDragStart = { dragDistance = 0f },
+                            onVerticalDrag = { change, amount -> change.consume(); dragDistance += amount },
+                            onDragEnd = { onStateChanged(MapHomePanelPolicy.onVerticalDrag(state, dragDistance)) },
+                        )
+                    }
+                    .clickable { onStateChanged(MapHomePanelPolicy.onHandleTap(state)) }
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    Modifier.width(36.dp).height(4.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {}
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (state == MapHomePanelState.CLOSED) "$eventCount événements" else "Événements autour de vous", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    if (state != MapHomePanelState.CLOSED) Text("Faites glisser la poignée pour ajuster le panneau", style = MaterialTheme.typography.labelSmall)
+                }
+                TextButton(
+                    onClick = {
+                        onStateChanged(if (state == MapHomePanelState.EXPANDED) MapHomePanelPolicy.onMapButton() else MapHomePanelPolicy.onListButton())
+                    },
+                    modifier = Modifier.testTag(if (state == MapHomePanelState.EXPANDED) "show-map" else "show-list"),
+                ) {
+                    Icon(if (state == MapHomePanelState.EXPANDED) Icons.Default.Map else Icons.Default.List, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (state == MapHomePanelState.EXPANDED) "Carte" else "Liste")
+                }
+            }
+            when (state) {
+                MapHomePanelState.CLOSED -> Unit
+                MapHomePanelState.PREVIEW -> Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    Text("Un aperçu rapide, sans masquer la carte.", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { onStateChanged(MapHomePanelPolicy.onListButton()) }, modifier = Modifier.testTag("preview-open-list")) {
+                        Text("Afficher toute la liste")
+                    }
+                }
+                MapHomePanelState.EXPANDED -> Box(Modifier.fillMaxSize()) { expandedContent() }
             }
         }
     }

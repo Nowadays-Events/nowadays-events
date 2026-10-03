@@ -63,8 +63,8 @@ fun EventDetailContent(event: Event, relatedEventCount: Int = 0, deleteEventCoun
         Text(event.fullDescription?.takeIf(String::isNotBlank) ?: event.shortDescription, style = MaterialTheme.typography.bodyLarge)
         if (onShowMap != null) {
             Text("Emplacement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            EventMapPreview(onShowMap)
-            OutlinedButton(onClick = onShowMap, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("show-event-on-map")) { Icon(Icons.Default.Map, null); Spacer(Modifier.width(8.dp)); Text("Ouvrir la carte") }
+            EventMapPreview(event, onShowMap)
+            OutlinedButton(onClick = onShowMap, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("show-event-on-map")) { Icon(Icons.Default.Map, null); Spacer(Modifier.width(8.dp)); Text("Voir sur la carte") }
         }
         Button(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, "geo:${event.latitude},${event.longitude}?q=${event.latitude},${event.longitude}(${Uri.encode(event.venueName)})".toUri())) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Icon(Icons.Default.Directions, null); Spacer(Modifier.width(8.dp)); Text("Itinéraire") }
         if (sourceUrls.any(String::isNotBlank)) ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) {

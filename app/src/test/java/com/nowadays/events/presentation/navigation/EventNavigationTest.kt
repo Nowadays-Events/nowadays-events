@@ -21,4 +21,11 @@ class EventNavigationTest {
         assertEquals(43.8904, request.latitude, 0.0)
         assertEquals(-0.5007, request.longitude, 0.0)
     }
+
+    @Test fun detailToMapRouteHighlightsWithoutReopeningTheDetail() {
+        val route = mapRoute(MapFocusRequest("event 42", 43.8904, -0.5007))
+        assertTrue(route.startsWith("map?"))
+        assertTrue(route.contains("eventId=event%2042"))
+        assertTrue(route.endsWith("openDetail=false"))
+    }
 }
