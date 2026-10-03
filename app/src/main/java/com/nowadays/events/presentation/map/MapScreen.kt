@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
@@ -360,7 +361,11 @@ internal fun MapHomePanel(
     ) {
         Column {
             Row(
-                Modifier.fillMaxWidth().height(76.dp)
+                Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    Modifier.weight(1f).fillMaxHeight()
                     .testTag("map-list-handle")
                     .pointerInput(state) {
                         detectVerticalDragGestures(
@@ -369,10 +374,9 @@ internal fun MapHomePanel(
                             onDragEnd = { onStateChanged(MapHomePanelPolicy.onVerticalDrag(state, dragDistance)) },
                         )
                     }
-                    .clickable { onStateChanged(MapHomePanelPolicy.onHandleTap(state)) }
-                    .padding(horizontal = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+                    .clickable { onStateChanged(MapHomePanelPolicy.onHandleTap(state)) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                 Surface(
                     Modifier.width(36.dp).height(4.dp),
                     shape = MaterialTheme.shapes.small,
@@ -382,6 +386,7 @@ internal fun MapHomePanel(
                 Column(Modifier.weight(1f)) {
                     Text(if (state == MapHomePanelState.CLOSED) "$eventCount événements" else "Événements autour de vous", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     if (state != MapHomePanelState.CLOSED) Text("Faites glisser la poignée pour ajuster le panneau", style = MaterialTheme.typography.labelSmall)
+                }
                 }
                 TextButton(
                     onClick = {
