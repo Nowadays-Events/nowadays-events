@@ -387,8 +387,7 @@ internal fun MapHomePanel(
                 ) {}
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(if (state == MapHomePanelState.CLOSED) "$eventCount événements" else "Événements autour de vous", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    if (state != MapHomePanelState.CLOSED) Text("Faites glisser la poignée pour ajuster le panneau", style = MaterialTheme.typography.labelSmall)
+                    Text(if (state == MapHomePanelState.CLOSED) "$eventCount événements" else "Liste", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 }
                 TextButton(
