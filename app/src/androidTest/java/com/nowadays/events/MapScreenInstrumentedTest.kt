@@ -5,6 +5,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertTrue
+import android.view.View
+import android.view.ViewGroup
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMap
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
@@ -24,17 +28,30 @@ class MapScreenInstrumentedTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun twoFingerZoomChangesCameraWithoutOpeningTheList() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val camera = context.getSharedPreferences("map_camera", Context.MODE_PRIVATE)
-        compose.waitUntil(30_000) { camera.contains("zoom") }
-        val before = camera.getFloat("zoom", 11.5f)
+        fun findMap(view: View): MapView? {
+            if (view is MapView) return view
+            if (view is ViewGroup) for (index in 0 until view.childCount) {
+                findMap(view.getChildAt(index))?.let { return it }
+            }
+            return null
+        }
+        var map: MapLibreMap? = null
+        compose.runOnIdle { requireNotNull(findMap(compose.activity.window.decorView)).getMapAsync { map = it } }
+        compose.waitUntil(30_000) { map != null }
+        var before = 0.0
+        var observed = 0.0
+        compose.runOnIdle {
+            before = map!!.cameraPosition.zoom
+            observed = before
+            map!!.addOnCameraIdleListener { observed = map!!.cameraPosition.zoom }
+        }
         compose.onNodeWithTag("event-map").performTouchInput {
             val focus = Offset(center.x, center.y * .8f)
             pinch(start0 = focus - Offset(35f, 0f), start1 = focus + Offset(35f, 0f),
                 end0 = focus - Offset(135f, 0f), end1 = focus + Offset(135f, 0f), durationMillis = 450)
         }
-        compose.waitUntil(10_000) { camera.getFloat("zoom", before) > before + .2f }
-        assertTrue(camera.getFloat("zoom", before) > before)
+        compose.waitUntil(10_000) { observed > before + .2 }
+        assertTrue(observed > before)
         compose.onNodeWithTag("show-list").assertIsDisplayed()
         compose.onNodeWithTag("preview-open-list").assertDoesNotExist()
     }

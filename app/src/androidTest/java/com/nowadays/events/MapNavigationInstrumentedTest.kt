@@ -39,6 +39,9 @@ class MapNavigationInstrumentedTest {
             compose.onNodeWithText("Toutes les dates").performClick()
             compose.onNodeWithTag("toggle-search").performClick()
             compose.onNodeWithTag("event-search").performTextInput("Validation position")
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithTag("event-list").fetchSemanticsNodes().isNotEmpty()
+            }
             val target = "event-row-ui-validation-30"
             compose.onNodeWithTag("event-list").performScrollToNode(hasTestTag(target))
             compose.onNodeWithTag("event-list").performTouchInput {
