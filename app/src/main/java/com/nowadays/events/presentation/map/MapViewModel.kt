@@ -34,6 +34,7 @@ class MapViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
     private val synchronizer: EventSynchronizer,
     private val clock: Clock,
+    private val hiding: com.nowadays.events.data.local.EventHidingPreferences,
 ) : ViewModel() {
     private val selectedFilter = MutableStateFlow(
         savedStateHandle.get<String>("selected_filter")
@@ -74,14 +75,18 @@ class MapViewModel @Inject constructor(
     private data class Selection(val eventId: String?, val attendance: AttendanceResponse, val expandedMainId: String?, val highlightedId: String?)
     private val selection = combine(selectedEventId, attendance, expandedMainEventId, highlightedEventId, ::Selection)
 
-    val uiState = combine(repository.observeEvents(), repository.observeSyncState(), filterSelection, contentFilters, selection) { events, syncState, filterSelection, content, selection ->
+    private val eventVisibility = combine(repository.observeEvents(), hiding.store.hiddenKeys) { events, keys ->
+        events to keys
+    }
+    val uiState = combine(eventVisibility, repository.observeSyncState(), filterSelection, contentFilters, selection) { eventVisibility, syncState, filterSelection, content, selection ->
+        val (events, hiddenKeys) = eventVisibility
         val filter = filterSelection.filter
         val customRange = filterSelection.range
         val dateFiltered = if (filter == TimeFilter.CUSTOM && customRange != null) {
             filters.apply(events, customRange.first, customRange.second)
         } else filters.apply(events, filter)
         val query = content.query.trim().lowercase()
-        val filtered = dateFiltered.filter { event ->
+        val matching = dateFiltered.filter { event ->
             (content.category == null || event.category == content.category) &&
                 when (content.price) {
                     EventPriceFilter.ALL -> true
@@ -93,6 +98,8 @@ class MapViewModel @Inject constructor(
                     event.venueName, event.address, event.organizer,
                 ).any { it.lowercase().contains(query) })
         }
+        val visibility = com.nowadays.events.domain.usecase.EventHidingPolicy.partition(matching, hiddenKeys)
+        val filtered = visibility.visible
         val families = EventFamilyGrouper.group(filtered)
         val expandedFamily = families.firstOrNull { it.main.id == selection.expandedMainId }
         val visible = expandedFamily?.events ?: families.map { it.main }
@@ -112,9 +119,12 @@ class MapViewModel @Inject constructor(
             selectedCategory = content.category,
             priceFilter = content.price,
             events = visible,
-            nearbyEvents = filters.apply(events, TimeFilter.ALL_FUTURE),
+            hiddenEvents = visibility.hidden,
+            allHiddenEvents = com.nowadays.events.domain.usecase.EventHidingPolicy.partition(events, hiddenKeys).hidden,
+            hiddenKeyCount = hiddenKeys.size,
+            nearbyEvents = filters.apply(com.nowadays.events.domain.usecase.EventHidingPolicy.partition(events, hiddenKeys).visible, TimeFilter.ALL_FUTURE),
             selectedEvent = selected,
-            highlightedEventId = selection.highlightedId,
+            highlightedEventId = MapSelectionPolicy.retainIfVisible(selection.highlightedId, visibleSelectionIds),
             relatedEvents = related,
             selectedIsMainEvent = selected != null && selectedFamily?.main?.id == selected.id && selectedFamily.children.isNotEmpty(),
             mainEventIds = families.filter { it.children.isNotEmpty() }.map { it.main.id }.toSet(),
@@ -204,4 +214,7 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch { repository.setAttendance(eventId, response) }
     }
     fun retrySync() { viewModelScope.launch { synchronizer.synchronize() } }
+    fun hideEvent(event: Event) { hiding.store.hide(event); clearMapSelection() }
+    fun revealEvent(event: Event) { hiding.store.reveal(event) }
+    fun revealAllEvents() { hiding.store.revealAll() }
 }

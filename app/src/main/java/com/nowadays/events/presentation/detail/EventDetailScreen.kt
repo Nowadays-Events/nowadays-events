@@ -16,6 +16,6 @@ import com.nowadays.events.domain.model.Event
     Scaffold(topBar = { TopAppBar(title = { Text("Détail de l’événement") }, navigationIcon = { IconButton(onClick = onBack, modifier = Modifier.testTag("detail-back")) { Icon(Icons.Default.ArrowBack, "Retour à la liste") } }) }) { padding ->
         when { !state.loaded -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.event == null -> Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Cet événement n’est plus disponible.", modifier = Modifier.testTag("event-not-found")); TextButton(onClick = onBack) { Text("Retour à la liste") } }
-            else -> EventDetailContent(state.event!!, attendance = state.attendance, onAttendanceChanged = viewModel::setAttendance, onDelete = { viewModel.delete(); onBack() }, onShowMap = { onShowMap(state.event!!) }, modifier = Modifier.padding(padding).padding(horizontal = 18.dp)) }
+            else -> EventDetailContent(state.event!!, attendance = state.attendance, onAttendanceChanged = viewModel::setAttendance, onDelete = { viewModel.delete(); onBack() }, onShowMap = { onShowMap(state.event!!) }, onHide = { viewModel.hide(); onBack() }, modifier = Modifier.padding(padding).padding(horizontal = 18.dp)) }
     }
 }

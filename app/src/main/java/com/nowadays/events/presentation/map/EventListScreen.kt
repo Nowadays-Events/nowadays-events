@@ -74,6 +74,7 @@ internal fun EventListScreen(
     var showPlaces by rememberSaveable { mutableStateOf(false) }
     var showMapPicker by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
+    var showHidden by rememberSaveable { mutableStateOf(false) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var cityQuery by rememberSaveable { mutableStateOf("") }
     var citySuggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
@@ -96,6 +97,7 @@ internal fun EventListScreen(
         } else locationMessage = ReferencePlacePolicy.gpsFailureMessage(permissionGranted = false)
     }
     val nearby = remember(state.events, reference, radiusKm) { NearbyEvents.find(state.events, reference.latitude, reference.longitude, radiusKm.toDouble()) }
+    val hiddenNearby = remember(state.hiddenEvents, reference, radiusKm) { NearbyEvents.find(state.hiddenEvents, reference.latitude, reference.longitude, radiusKm.toDouble()) }
     val listItems = remember(nearby) { nearby.map { NearbyListItem(it.event, it.distanceKm) } }
     val sections = remember(listItems, state.selectedFilter) { CompactEventListPolicy.sections(listItems, state.selectedFilter, Instant.now(), ZoneId.systemDefault()) }
 
@@ -121,9 +123,15 @@ internal fun EventListScreen(
             CompactPeriodBar(state.selectedFilter, viewModel::selectFilter) { showCalendar = true }
             Text(searchHorizonLabel(state.selectedFilter, state.customEndDate, Clock.systemUTC()), Modifier.padding(horizontal = 16.dp, vertical = 3.dp).testTag("result-introduction"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("${compactSyncStatusLabel(state.syncState, state.events.isNotEmpty(), state.syncDataPotentiallyStale)} · v${BuildConfig.VERSION_NAME}", Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("compact-sync-state"), style = MaterialTheme.typography.labelSmall, color = if (state.syncState.status in setOf(SyncStatus.FAILED_EMPTY, SyncStatus.FAILED_WITH_CACHE)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.hiddenKeyCount > 0) TextButton(onClick = { showHidden = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("show-hidden-events")) {
+                Text("Masqués (${hiddenNearby.size}) · Gérer")
+            }
             when {
                 state.isLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                nearby.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Aucun événement dans ce rayon pour cette période.", Modifier.padding(24.dp).testTag("event-list-empty")) }
+                nearby.isEmpty() -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (hiddenNearby.isNotEmpty()) "Tous les résultats de ce filtre sont masqués sur cet appareil." else "Aucun événement dans ce rayon pour cette période.", Modifier.testTag("event-list-empty"))
+                    if (hiddenNearby.isNotEmpty()) TextButton({ showHidden = true }, Modifier.heightIn(min = 48.dp).testTag("empty-show-hidden")) { Text("Voir les ${hiddenNearby.size} événements masqués") }
+                }
                 else -> LazyColumn(Modifier.fillMaxSize().testTag("event-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->
                         stickyHeader { Text(section.title, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
@@ -139,6 +147,7 @@ internal fun EventListScreen(
                                     }
                                     saveCollapsedEventIds(preferences, collapsedEventIds)
                                 },
+                                onHide = viewModel::hideEvent,
                                 onOpenEvent = onOpenEvent,
                             )
                         }
@@ -165,6 +174,8 @@ internal fun EventListScreen(
     locationMessage?.let { message -> AlertDialog({ locationMessage = null }, confirmButton = { TextButton({ locationMessage = null }) { Text("Compris") } }, text = { Text(message) }) }
     if (showMapPicker) LocationPickerDialog(reference.latitude, reference.longitude, { showMapPicker = false }) { lat, lon -> showMapPicker = false; selectPlace(ReferencePlace("Point choisi", lat, lon, "map")) }
     if (showCalendar) DateFilterDialog(state.customStartDate, state.customEndDate, { showCalendar = false }, { start, end -> viewModel.selectCustomRange(start, end); showCalendar = false }, { viewModel.selectFilter(TimeFilter.ALL_FUTURE); showCalendar = false })
+    if (showHidden) HiddenEventsSheet(hiddenNearby.map { it.event }, state.allHiddenEvents, state.hiddenKeyCount,
+        viewModel::revealEvent, viewModel::revealAllEvents, { showHidden = false })
 }
 
 @Composable
@@ -173,9 +184,11 @@ internal fun CompactEventRow(
     now: Instant = Instant.now(),
     isCollapsed: Boolean = false,
     onToggleCollapsed: () -> Unit = {},
+    onHide: ((Event) -> Unit)? = null,
     onOpenEvent: (Event) -> Unit,
 ) {
     val event = item.event
+    var showActions by remember { mutableStateOf(false) }
     val status = when (event.status) { EventStatus.CANCELLED -> "ANNULÉ · "; EventStatus.POSTPONED -> "REPORTÉ · "; else -> "" }
     Surface(Modifier.fillMaxWidth().heightIn(min = if (isCollapsed) 52.dp else 72.dp).clickable { onOpenEvent(event) }.testTag("event-row-${event.id}"), color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.errorContainer.copy(alpha = .22f) else MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (isCollapsed) 0.dp else 9.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -193,6 +206,16 @@ internal fun CompactEventRow(
             Text(distanceLabel(item.distanceKm), style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.testTag("event-distance-${event.id}"))
             IconButton(onClick = onToggleCollapsed, modifier = Modifier.testTag("event-collapse-${event.id}")) {
                 Icon(if (isCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess, if (isCollapsed) "Développer ${event.title}" else "Réduire ${event.title}")
+            }
+            if (onHide != null) Box {
+                IconButton({ showActions = true }, Modifier.testTag("event-actions-${event.id}")) {
+                    Icon(Icons.Default.MoreVert, "Actions pour ${event.title}")
+                }
+                DropdownMenu(showActions, { showActions = false }) {
+                    DropdownMenuItem(text = { Text("Masquer cet événement") },
+                        leadingIcon = { Icon(Icons.Default.VisibilityOff, null) },
+                        onClick = { showActions = false; onHide(event) }, modifier = Modifier.testTag("hide-event-${event.id}"))
+                }
             }
         }
     }

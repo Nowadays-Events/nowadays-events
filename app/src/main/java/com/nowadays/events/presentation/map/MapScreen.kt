@@ -114,6 +114,7 @@ fun MapScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var showNearby by remember { mutableStateOf(false) }
+    var showHidden by rememberSaveable { mutableStateOf(false) }
     var nearbyLocation by remember { mutableStateOf<LatLng?>(null) }
     var nearbyRadiusKm by remember { mutableStateOf(15) }
     var pendingNearbyRequest by remember { mutableStateOf(false) }
@@ -282,8 +283,18 @@ fun MapScreen(
                 attendance = state.attendanceResponse,
                 onAttendanceChanged = viewModel::setAttendance,
                 onDelete = viewModel::deleteSelectedEvent,
+                onHide = { viewModel.hideEvent(event) },
                 onDismiss = viewModel::clearSelection,
             ) }
+            if (panelState != MapHomePanelState.EXPANDED && state.hiddenKeyCount > 0) TextButton(
+                onClick = { showHidden = true },
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = if (panelState == MapHomePanelState.PREVIEW) 196.dp else 84.dp).heightIn(min = 48.dp).testTag("map-show-hidden-events"),
+            ) { Text("Masqués (${state.hiddenEvents.size})") }
+            if (panelState != MapHomePanelState.EXPANDED && state.events.isEmpty() && state.hiddenEvents.isNotEmpty()) Surface(
+                modifier = Modifier.align(Alignment.Center).padding(24.dp), shape = MaterialTheme.shapes.medium,
+            ) { TextButton({ showHidden = true }, Modifier.testTag("map-all-results-hidden")) { Text("Tous les résultats sont masqués. Voir les masqués") } }
+            if (showHidden) HiddenEventsSheet(state.hiddenEvents, state.allHiddenEvents, state.hiddenKeyCount,
+                viewModel::revealEvent, viewModel::revealAllEvents, { showHidden = false })
             if (showCalendar) {
                 DateFilterDialog(
                     initialStart = state.customStartDate,

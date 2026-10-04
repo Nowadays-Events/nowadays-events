@@ -28,12 +28,12 @@ import java.time.format.FormatStyle
 @Composable
 fun EventDetailSheet(event: Event, relatedEventCount: Int = 0, deleteEventCount: Int = 1,
     sourceUrls: List<String> = event.sourceUrls, attendance: AttendanceResponse,
-    onAttendanceChanged: (AttendanceResponse) -> Unit, onDelete: () -> Unit = {}, onDismiss: () -> Unit,
+    onAttendanceChanged: (AttendanceResponse) -> Unit, onDelete: () -> Unit = {}, onHide: (() -> Unit)? = null, onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("event-detail-sheet")) {
         EventDetailContent(event, relatedEventCount, deleteEventCount, sourceUrls, attendance,
-            onAttendanceChanged, onDelete, modifier = Modifier.heightIn(max = 590.dp).padding(horizontal = 18.dp))
+            onAttendanceChanged, onDelete, onHide = onHide, modifier = Modifier.heightIn(max = 590.dp).padding(horizontal = 18.dp))
     }
 }
 
@@ -41,7 +41,7 @@ fun EventDetailSheet(event: Event, relatedEventCount: Int = 0, deleteEventCount:
 fun EventDetailContent(event: Event, relatedEventCount: Int = 0, deleteEventCount: Int = 1,
     sourceUrls: List<String> = event.sourceUrls, attendance: AttendanceResponse,
     onAttendanceChanged: (AttendanceResponse) -> Unit, onDelete: () -> Unit = {},
-    onShowMap: (() -> Unit)? = null, modifier: Modifier = Modifier,
+    onShowMap: (() -> Unit)? = null, onHide: (() -> Unit)? = null, modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var confirmDelete by remember { mutableStateOf(false) }
@@ -59,6 +59,9 @@ fun EventDetailContent(event: Event, relatedEventCount: Int = 0, deleteEventCoun
             }
         }
         statusMessage(event.status)?.let { Text(it, color = if (event.status == EventStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
+        if (onHide != null) OutlinedButton(onClick = onHide, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("detail-hide-event")) {
+            Icon(Icons.Default.VisibilityOff, null); Spacer(Modifier.width(8.dp)); Text("Masquer cet événement")
+        }
         Text("À propos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(event.fullDescription?.takeIf(String::isNotBlank) ?: event.shortDescription, style = MaterialTheme.typography.bodyLarge)
         if (onShowMap != null) {
