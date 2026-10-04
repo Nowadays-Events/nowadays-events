@@ -94,14 +94,14 @@ class ReversibleEventHidingInstrumentedTest {
         compose.setContent { NowadaysTheme {
             EventResultsEmptyState(3, { opened = true })
         } }
-        compose.onNodeWithTag("event-list-empty").assertTextContains("masqués")
-        compose.onNodeWithTag("empty-show-hidden").assertTextContains("3").performClick()
+        compose.onNodeWithTag("event-list-empty").assertTextEquals("Tous les résultats de ce filtre sont masqués sur cet appareil.")
+        compose.onNodeWithTag("empty-show-hidden").assertTextEquals("Voir les 3 événements masqués").performClick()
         assertTrue(opened)
     }
 
     @Test fun genuineEmptyStateDoesNotPretendResultsWereHidden() {
         compose.setContent { NowadaysTheme { EventResultsEmptyState(0, {}) } }
-        compose.onNodeWithTag("event-list-empty").assertTextContains("Aucun événement")
+        compose.onNodeWithTag("event-list-empty").assertTextEquals("Aucun événement dans ce rayon pour cette période.")
         compose.onNodeWithTag("empty-show-hidden").assertDoesNotExist()
     }
 
