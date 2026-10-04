@@ -1,9 +1,9 @@
 package com.nowadays.events
 
-import android.content.Context
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.test.pinch
-import androidx.test.core.app.ApplicationProvider
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import android.view.View
 import android.view.ViewGroup
@@ -36,7 +36,11 @@ class MapScreenInstrumentedTest {
             return null
         }
         var map: MapLibreMap? = null
-        compose.runOnIdle { requireNotNull(findMap(compose.activity.window.decorView)).getMapAsync { map = it } }
+        lateinit var mapView: MapView
+        compose.runOnIdle {
+            mapView = requireNotNull(findMap(compose.activity.window.decorView))
+            mapView.getMapAsync { map = it }
+        }
         compose.waitUntil(30_000) { map != null }
         var before = 0.0
         var observed = 0.0
@@ -45,15 +49,49 @@ class MapScreenInstrumentedTest {
             observed = before
             map!!.addOnCameraIdleListener { observed = map!!.cameraPosition.zoom }
         }
-        compose.onNodeWithTag("event-map").performTouchInput {
-            val focus = Offset(center.x, center.y * .8f)
-            pinch(start0 = focus - Offset(35f, 0f), start1 = focus + Offset(35f, 0f),
-                end0 = focus - Offset(135f, 0f), end1 = focus + Offset(135f, 0f), durationMillis = 450)
-        }
+        injectNativePinch(mapView, 35f, 135f)
         compose.waitUntil(10_000) { observed > before + .2 }
-        assertTrue(observed > before)
+        assertTrue("Zoom must increase: $before -> $observed", observed > before + .2)
+        val zoomedIn = observed
+        injectNativePinch(mapView, 135f, 35f)
+        compose.waitUntil(10_000) { observed < zoomedIn - .2 }
+        assertTrue("Zoom must decrease: $zoomedIn -> $observed", observed < zoomedIn - .2)
         compose.onNodeWithTag("show-list").assertIsDisplayed()
         compose.onNodeWithTag("preview-open-list").assertDoesNotExist()
+    }
+
+    /** Pace real touchscreen events so the native AndroidView receives frame-time gestures. */
+    private fun injectNativePinch(view: MapView, startRadius: Float, endRadius: Float) {
+        val location = IntArray(2)
+        var focusX = 0f
+        var focusY = 0f
+        compose.runOnIdle {
+            view.getLocationOnScreen(location)
+            focusX = location[0] + view.width / 2f
+            focusY = location[1] + view.height * .4f
+        }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val downTime = SystemClock.uptimeMillis()
+        val properties = Array(2) { index -> MotionEvent.PointerProperties().apply {
+            id = index; toolType = MotionEvent.TOOL_TYPE_FINGER
+        } }
+        fun send(action: Int, count: Int, radius: Float) {
+            val coordinates = Array(count) { index -> MotionEvent.PointerCoords().apply {
+                x = focusX + if (index == 0) -radius else radius
+                y = focusY; pressure = 1f; size = 1f
+            } }
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, count,
+                properties, coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+            try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+        }
+        send(MotionEvent.ACTION_DOWN, 1, startRadius)
+        send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, startRadius)
+        for (step in 1..30) {
+            SystemClock.sleep(15)
+            send(MotionEvent.ACTION_MOVE, 2, startRadius + (endRadius - startRadius) * step / 30f)
+        }
+        send(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, endRadius)
+        send(MotionEvent.ACTION_UP, 1, endRadius)
     }
 
     private fun openList() {

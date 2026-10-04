@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.nowadays.events.data.local.EventDatabase
+import com.nowadays.events.validation.ValidationDatabaseEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import com.nowadays.events.data.mapper.toEntity
 import com.nowadays.events.domain.model.*
 import java.time.Instant
@@ -21,7 +21,7 @@ class MapNavigationInstrumentedTest {
 
     @Test fun sameLocationEventsStaySeparateAndReturnRestoresPixelPosition() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val database = Room.databaseBuilder(context, EventDatabase::class.java, "events.db").build()
+        val dao = EntryPointAccessors.fromApplication(context, ValidationDatabaseEntryPoint::class.java).eventDao()
         val start = Instant.parse("2099-10-04T12:00:00Z")
         val fixtures = (0..50).map { index -> Event(
             id = "ui-validation-$index", title = "Validation position $index",
@@ -32,7 +32,7 @@ class MapNavigationInstrumentedTest {
             price = EventPrice.Free, updatedAt = start, origin = DataOrigin.MANUAL,
         ) }
         try {
-            runBlocking { database.eventDao().upsertAll(fixtures.map { it.toEntity() }) }
+            runBlocking { dao.upsertAll(fixtures.map { it.toEntity() }) }
             compose.onNodeWithTag("show-list").performClick()
             compose.onNodeWithTag("period-filter-bar").performScrollToNode(hasTestTag("period-custom"))
             compose.onNodeWithTag("period-custom").performClick()
@@ -58,8 +58,7 @@ class MapNavigationInstrumentedTest {
             compose.onNodeWithTag("event-row-ui-validation-31").performClick()
             compose.onNodeWithText("Validation position 31").assertIsDisplayed()
         } finally {
-            runBlocking { database.eventDao().deleteEvents(fixtures.map { it.id }) }
-            database.close()
+            runBlocking { dao.deleteEvents(fixtures.map { it.id }) }
         }
     }
 }
