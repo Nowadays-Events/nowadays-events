@@ -101,6 +101,8 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: |
+            adb root
+            adb wait-for-device
             adb shell setprop persist.sys.timezone Europe/Paris
             adb install validation/app/app-debug.apk
             adb install validation/tests/app-debug-androidTest.apk
