@@ -42,19 +42,28 @@ class MapScreenInstrumentedTest {
             mapView.getMapAsync { map = it }
         }
         compose.waitUntil(30_000) { map != null }
-        var before = 0.0
-        var observed = 0.0
-        compose.runOnIdle {
-            before = map!!.cameraPosition.zoom
-            observed = before
-            map!!.addOnCameraIdleListener { observed = map!!.cameraPosition.zoom }
+        var styleReady = false
+        compose.runOnIdle { map!!.getStyle { styleReady = true } }
+        compose.waitUntil(30_000) { styleReady }
+        compose.waitUntil(10_000) {
+            var focused = false
+            compose.runOnIdle { focused = mapView.hasWindowFocus() }
+            focused
         }
+        fun currentZoom(): Double {
+            var zoom = 0.0
+            compose.runOnIdle { zoom = map!!.cameraPosition.zoom }
+            return zoom
+        }
+        val before = currentZoom()
         injectNativePinch(mapView, 35f, 135f)
-        compose.waitUntil(10_000) { observed > before + .2 }
+        var observed = currentZoom()
+        android.util.Log.i("MapGestureValidation", "Zoom in: $before -> $observed; view=${mapView.width}x${mapView.height}")
+        compose.waitUntil(10_000) { observed = currentZoom(); observed > before + .2 }
         assertTrue("Zoom must increase: $before -> $observed", observed > before + .2)
         val zoomedIn = observed
         injectNativePinch(mapView, 135f, 35f)
-        compose.waitUntil(10_000) { observed < zoomedIn - .2 }
+        compose.waitUntil(10_000) { observed = currentZoom(); observed < zoomedIn - .2 }
         assertTrue("Zoom must decrease: $zoomedIn -> $observed", observed < zoomedIn - .2)
         compose.onNodeWithTag("show-list").assertIsDisplayed()
         compose.onNodeWithTag("preview-open-list").assertDoesNotExist()
