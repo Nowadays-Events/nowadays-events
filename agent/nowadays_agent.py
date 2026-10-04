@@ -539,13 +539,53 @@ def enrich_recurring_events(
         if utc_occurrence >= reference:
             occurrences.append(utc_occurrence)
 
+    period_payloads: list[list[Any]] = []
     for _, encoded in re.findall(r"\bperiods=(['\"])(.*?)\1", body, flags=re.IGNORECASE | re.DOTALL):
         try:
             payload = json.loads(html.unescape(encoded))
         except (json.JSONDecodeError, TypeError):
             continue
-        if not isinstance(payload, list):
-            continue
+        if isinstance(payload, list):
+            period_payloads.append(payload)
+
+    # Responsive widgets repeat the same authoritative period. A separate
+    # calendar widget may expose only its first date, not the complete schedule.
+    # Only an unambiguous range with no recurrence evidence takes precedence.
+    structured_periods = {
+        json.dumps(period, sort_keys=True): period
+        for payload in period_payloads for period in payload
+        if isinstance(period, dict) and period.get("startDate")
+    }
+    if len(structured_periods) == 1:
+        period = next(iter(structured_periods.values()))
+        recurrence_evidence = any(period.get(key) for key in (
+            "days", "_formated_days", "_isMultipleOneDays", "_multipleDay", "schedules",
+        ))
+        if period.get("endDate") and not recurrence_evidence:
+            try:
+                start = datetime.fromisoformat(str(period["startDate"]).replace("Z", "+00:00"))
+                end = datetime.fromisoformat(str(period["endDate"]).replace("Z", "+00:00"))
+                period_timezone = site_timezone or start.tzinfo or ZoneInfo("Europe/Paris")
+                local_start = (start if start.tzinfo else start.replace(tzinfo=period_timezone)).astimezone(period_timezone)
+                local_end = (end if end.tzinfo else end.replace(tzinfo=period_timezone)).astimezone(period_timezone)
+            except ValueError:
+                pass
+            else:
+                if local_end > local_start and local_end.date() > local_start.date() and not period.get("_isOneDay"):
+                    date_only = (
+                        local_start.time().isoformat() == "00:00:00"
+                        and local_end.time().isoformat() in {"00:00:00", "23:59:59"}
+                    )
+                    return [event if event.schedule_type == "recurring" else replace(
+                        event,
+                        start_at=local_start.astimezone(timezone.utc).isoformat(),
+                        end_at=local_end.astimezone(timezone.utc).isoformat(),
+                        schedule_type="continuous", schedule_reason="tourinsoft_continuous_period",
+                        occurrence_count=1, next_occurrence_at=None, occurrence_starts=(),
+                        time_precision="date_only" if date_only else event.time_precision,
+                    ) for event in events]
+
+    for payload in period_payloads:
         for period in payload:
             if not isinstance(period, dict):
                 continue
@@ -1364,7 +1404,9 @@ def should_export_event(item: dict[str, Any], now: datetime) -> bool:
             pass
     if schedule_type == "recurring":
         return False
-    return end.date() >= now.date()
+    # Compare instants, not UTC calendar days: a Paris event ending at 23:59
+    # must not remain visible until 02:00 locally, nor an exact event all day.
+    return end >= now
 
 
 def legacy_schedule_type(item: dict[str, Any]) -> str:
