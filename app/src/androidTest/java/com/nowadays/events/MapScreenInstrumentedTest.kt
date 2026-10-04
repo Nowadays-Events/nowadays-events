@@ -56,9 +56,18 @@ class MapScreenInstrumentedTest {
             return zoom
         }
         val before = currentZoom()
+        var receivedMoves = 0
+        compose.runOnIdle {
+            android.util.Log.i("MapGestureValidation", "Gestures: zoom=${map!!.uiSettings.isZoomGesturesEnabled}; location=${mapView.x},${mapView.y}")
+            mapView.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_MOVE && event.pointerCount == 2) receivedMoves++
+                android.util.Log.i("MapGestureValidation", "Touch action=${event.actionMasked}; pointers=${event.pointerCount}; x=${event.x}; y=${event.y}")
+                false
+            }
+        }
         injectNativePinch(mapView, 35f, 135f)
         var observed = currentZoom()
-        android.util.Log.i("MapGestureValidation", "Zoom in: $before -> $observed; view=${mapView.width}x${mapView.height}")
+        android.util.Log.i("MapGestureValidation", "Zoom in: $before -> $observed; view=${mapView.width}x${mapView.height}; receivedMoves=$receivedMoves")
         compose.waitUntil(10_000) { observed = currentZoom(); observed > before + .2 }
         assertTrue("Zoom must increase: $before -> $observed", observed > before + .2)
         val zoomedIn = observed
