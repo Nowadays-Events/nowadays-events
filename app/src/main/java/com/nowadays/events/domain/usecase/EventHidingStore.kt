@@ -16,9 +16,10 @@ data class EventVisibility(val visible: List<Event>, val hidden: List<Event>) {
 
 /** Id-only identity: never merge preferences by title, place, URL or occurrence date. */
 object EventHidingPolicy {
-    fun key(event: Event): String {
-        require(event.id.isNotBlank()) { "An event needs a persistent id" }
-        return "id:${event.id}"
+    fun key(event: Event): String = key(event.id)
+    fun key(id: String): String {
+        require(id.isNotBlank()) { "An event needs a persistent id" }
+        return "id:$id"
     }
 
     fun partition(events: List<Event>, hiddenKeys: Set<String>): EventVisibility =

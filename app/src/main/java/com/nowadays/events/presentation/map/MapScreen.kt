@@ -292,7 +292,7 @@ fun MapScreen(
             ) { Text("Masqués (${state.hiddenEvents.size})") }
             if (panelState != MapHomePanelState.EXPANDED && state.events.isEmpty() && state.hiddenEvents.isNotEmpty()) Surface(
                 modifier = Modifier.align(Alignment.Center).padding(24.dp), shape = MaterialTheme.shapes.medium,
-            ) { TextButton({ showHidden = true }, Modifier.testTag("map-all-results-hidden")) { Text("Tous les résultats sont masqués. Voir les masqués") } }
+            ) { EventResultsEmptyState(state.hiddenEvents.size, { showHidden = true }, Modifier.padding(16.dp).testTag("map-all-results-hidden")) }
             if (showHidden) HiddenEventsSheet(state.hiddenEvents, state.allHiddenEvents, state.hiddenKeyCount,
                 viewModel::revealEvent, viewModel::revealAllEvents, { showHidden = false })
             if (showCalendar) {

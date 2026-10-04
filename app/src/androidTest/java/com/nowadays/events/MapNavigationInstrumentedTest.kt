@@ -56,6 +56,10 @@ class MapNavigationInstrumentedTest {
             // The neighboring event has identical dates and coordinates, but its own accessible row.
             compose.onNodeWithTag("event-list").performScrollToNode(hasTestTag("event-row-ui-validation-31"))
             compose.onNodeWithTag("event-row-ui-validation-31").performClick()
+            // Room-backed detail loading is asynchronous, independently of Compose idleness.
+            compose.waitUntil(10_000) {
+                compose.onAllNodesWithTag("event-detail-content").fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNodeWithText("Validation position 31").assertIsDisplayed()
         } finally {
             runBlocking { dao.deleteEvents(fixtures.map { it.id }) }

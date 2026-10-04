@@ -77,6 +77,34 @@ class ReversibleEventHidingInstrumentedTest {
         assertTrue(hidden)
     }
 
+    @Test fun rowStillOpensItsOwnDetailWhenHideActionsAreAvailable() {
+        val event = event("api-row-open")
+        var opened: String? = null
+        var hidden = false
+        compose.setContent { NowadaysTheme {
+            CompactEventRow(NearbyListItem(event, 2.0), now,
+                onHide = { hidden = true }, onOpenEvent = { opened = it.id })
+        } }
+        compose.onNodeWithTag("event-row-${event.id}").performClick()
+        compose.runOnIdle { assertEquals(event.id, opened); assertFalse(hidden) }
+    }
+
+    @Test fun allHiddenEmptyStateExplainsAndOpensTheManagement() {
+        var opened = false
+        compose.setContent { NowadaysTheme {
+            EventResultsEmptyState(3, { opened = true })
+        } }
+        compose.onNodeWithTag("event-list-empty").assertTextContains("masqués")
+        compose.onNodeWithTag("empty-show-hidden").assertTextContains("3").performClick()
+        assertTrue(opened)
+    }
+
+    @Test fun genuineEmptyStateDoesNotPretendResultsWereHidden() {
+        compose.setContent { NowadaysTheme { EventResultsEmptyState(0, {}) } }
+        compose.onNodeWithTag("event-list-empty").assertTextContains("Aucun événement")
+        compose.onNodeWithTag("empty-show-hidden").assertDoesNotExist()
+    }
+
     @Test fun sheetRevealsOneAndThenAllIncludingRetainedAbsentChoices() {
         val first = event("api-one")
         val second = event("api-two").copy(scheduleType = EventScheduleType.RECURRING, occurrenceCount = 2,

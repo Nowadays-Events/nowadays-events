@@ -129,8 +129,7 @@ internal fun EventListScreen(
             when {
                 state.isLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
                 nearby.isEmpty() -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (hiddenNearby.isNotEmpty()) "Tous les résultats de ce filtre sont masqués sur cet appareil." else "Aucun événement dans ce rayon pour cette période.", Modifier.testTag("event-list-empty"))
-                    if (hiddenNearby.isNotEmpty()) TextButton({ showHidden = true }, Modifier.heightIn(min = 48.dp).testTag("empty-show-hidden")) { Text("Voir les ${hiddenNearby.size} événements masqués") }
+                    EventResultsEmptyState(hiddenNearby.size, { showHidden = true })
                 }
                 else -> LazyColumn(Modifier.fillMaxSize().testTag("event-list"), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->

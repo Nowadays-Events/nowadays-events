@@ -124,7 +124,7 @@ class MapViewModel @Inject constructor(
             hiddenKeyCount = hiddenKeys.size,
             nearbyEvents = filters.apply(com.nowadays.events.domain.usecase.EventHidingPolicy.partition(events, hiddenKeys).visible, TimeFilter.ALL_FUTURE),
             selectedEvent = selected,
-            highlightedEventId = MapSelectionPolicy.retainIfVisible(selection.highlightedId, visibleSelectionIds),
+            highlightedEventId = selection.highlightedId?.takeUnless { com.nowadays.events.domain.usecase.EventHidingPolicy.key(it) in hiddenKeys },
             relatedEvents = related,
             selectedIsMainEvent = selected != null && selectedFamily?.main?.id == selected.id && selectedFamily.children.isNotEmpty(),
             mainEventIds = families.filter { it.children.isNotEmpty() }.map { it.main.id }.toSet(),

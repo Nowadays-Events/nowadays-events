@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.nowadays.events.domain.model.Event
+import com.nowadays.events.domain.model.EventStatus
 import com.nowadays.events.presentation.eventScheduleLabel
 import java.time.Instant
 
@@ -41,6 +42,12 @@ internal fun HiddenEventsSheet(
                 items(events, key = Event::id) { event ->
                     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                         Text(event.title, style = MaterialTheme.typography.titleMedium)
+                        when (event.status) {
+                            EventStatus.CANCELLED -> Text("ANNULÉ", color = MaterialTheme.colorScheme.error)
+                            EventStatus.POSTPONED -> Text("REPORTÉ")
+                            EventStatus.UNVERIFIED -> Text("À VÉRIFIER")
+                            EventStatus.ACTIVE -> Unit
+                        }
                         Text(eventScheduleLabel(event, now = now), style = MaterialTheme.typography.bodySmall)
                         Text(event.venueName, style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = { onReveal(event) }, modifier = Modifier.heightIn(min = 48.dp).testTag("reveal-event-${event.id}")) {
