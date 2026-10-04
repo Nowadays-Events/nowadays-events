@@ -21,6 +21,11 @@ on:
       - "gradlew"
       - "gradlew.bat"
   workflow_dispatch:
+    inputs:
+      instrumented:
+        description: "Execute device tests on an isolated Android emulator"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -62,3 +67,53 @@ jobs:
           name: xymis-events-debug-androidTest-${{ github.run_number }}
           path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           retention-days: 7
+
+  device-tests:
+    if: github.event_name == 'workflow_dispatch' && inputs.instrumented
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download application APK from this validation
+        uses: actions/download-artifact@v6
+        with:
+          name: xymis-events-debug-${{ github.run_number }}
+          path: validation/app
+
+      - name: Download instrumentation APK from this validation
+        uses: actions/download-artifact@v6
+        with:
+          name: xymis-events-debug-androidTest-${{ github.run_number }}
+          path: validation/tests
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Execute all instrumented tests
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: |
+            adb shell setprop persist.sys.timezone Europe/Paris
+            adb install validation/app/app-debug.apk
+            adb install validation/tests/app-debug-androidTest.apk
+            adb shell am instrument -w com.nowadays.events.debug.test/androidx.test.runner.AndroidJUnitRunner | tee instrumentation.txt
+            adb logcat -d > instrumentation-logcat.txt
+            grep -Eq '^OK \([0-9]+ tests?\)' instrumentation.txt
+
+      - name: Preserve device test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xymis-device-tests-${{ github.run_number }}
+          path: |
+            instrumentation.txt
+            instrumentation-logcat.txt
+          retention-days: 14
