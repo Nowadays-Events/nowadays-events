@@ -104,9 +104,12 @@ class MapScreenInstrumentedTest {
         }
         send(MotionEvent.ACTION_DOWN, 1, startRadius)
         send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, startRadius)
-        for (step in 1..30) {
+        // sendPointerSync also waits for dispatch. Thirty tiny steps fall below
+        // MapLibre's native minimum scale speed on the CI emulator. Ten paced
+        // steps preserve the same physical span while representing a real pinch.
+        for (step in 1..10) {
             SystemClock.sleep(15)
-            send(MotionEvent.ACTION_MOVE, 2, startRadius + (endRadius - startRadius) * step / 30f)
+            send(MotionEvent.ACTION_MOVE, 2, startRadius + (endRadius - startRadius) * step / 10f)
         }
         send(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2, endRadius)
         send(MotionEvent.ACTION_UP, 1, endRadius)
