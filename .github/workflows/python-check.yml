@@ -1,0 +1,39 @@
+name: Check Python collector
+
+on:
+  push:
+    paths:
+      - "agent/**"
+      - ".github/workflows/python-check.yml"
+  pull_request:
+    paths:
+      - "agent/**"
+      - ".github/workflows/python-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Run complete collector test suite
+        env:
+          PYTHONUTF8: "1"
+        run: python -m unittest discover -s agent -p "test_*.py" -v
