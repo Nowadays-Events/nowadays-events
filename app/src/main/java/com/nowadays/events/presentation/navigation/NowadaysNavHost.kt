@@ -12,10 +12,12 @@ import android.net.Uri
 import com.nowadays.events.presentation.map.MapScreen
 import com.nowadays.events.presentation.form.EventFormScreen
 import com.nowadays.events.presentation.detail.EventDetailScreen
+import com.nowadays.events.presentation.settings.TasteSettingsScreen
 
 private const val MAP_ROUTE = "map"
 private const val FORM_ROUTE = "event-form"
 private const val DETAIL_ROUTE = "event/{eventId}"
+private const val SETTINGS_ROUTE = "settings"
 
 @Composable
 fun NowadaysNavHost() {
@@ -37,6 +39,7 @@ fun NowadaysNavHost() {
             val eventId = entry.arguments?.getString("eventId")?.let(Uri::decode)
             MapScreen(
                 onAddEvent = { navController.navigate(FORM_ROUTE) },
+                onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
                 onOpenEvent = { event -> navController.navigate(detailRoute(event.id)) },
                 onNavigateBack = if (navController.previousBackStackEntry != null) { { navController.popBackStack() } } else null,
                 focusLatitude = latitude ?: routeLatitude,
@@ -64,6 +67,9 @@ fun NowadaysNavHost() {
                     navController.popBackStack()
                 },
             )
+        }
+        composable(SETTINGS_ROUTE) {
+            TasteSettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

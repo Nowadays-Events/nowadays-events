@@ -9,8 +9,8 @@ class MapHomePanelPolicyTest {
         assertEquals(MapHomePanelState.CLOSED, MapHomePanelPolicy.onMapButton())
     }
 
-    @Test fun `handle walks through the three simple states`() {
-        assertEquals(MapHomePanelState.PREVIEW, MapHomePanelPolicy.onHandleTap(MapHomePanelState.CLOSED))
+    @Test fun `handle opens the full list in one tap while preview remains available`() {
+        assertEquals(MapHomePanelState.EXPANDED, MapHomePanelPolicy.onHandleTap(MapHomePanelState.CLOSED))
         assertEquals(MapHomePanelState.EXPANDED, MapHomePanelPolicy.onHandleTap(MapHomePanelState.PREVIEW))
         assertEquals(MapHomePanelState.PREVIEW, MapHomePanelPolicy.onHandleTap(MapHomePanelState.EXPANDED))
     }

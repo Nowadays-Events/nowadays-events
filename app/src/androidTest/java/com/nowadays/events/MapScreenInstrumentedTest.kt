@@ -126,6 +126,18 @@ class MapScreenInstrumentedTest {
         compose.onNodeWithTag("show-list").assertIsDisplayed()
     }
 
+    @Test fun oneTapOnClosedPanelHandleOpensTheFullList() {
+        compose.onNodeWithTag("map-list-handle").performClick()
+        compose.onNodeWithTag("show-map").assertIsDisplayed()
+        compose.onNodeWithTag("preview-open-list").assertDoesNotExist()
+        compose.onNodeWithTag("map-search-action").assertDoesNotExist()
+        compose.onNodeWithTag("open-settings").assertDoesNotExist()
+        compose.onNodeWithTag("show-map").performClick()
+        compose.onNodeWithTag("show-list").assertIsDisplayed()
+        compose.onNodeWithTag("map-search-action").assertIsDisplayed()
+        compose.onNodeWithTag("open-settings").assertIsDisplayed()
+    }
+
     @Test fun handleMovesFromClosedToPreviewAndExpandedWithoutTouchingTheMap() {
         compose.onNodeWithTag("map-list-handle").performTouchInput { swipeUp() }
         compose.onNodeWithTag("preview-open-list").assertIsDisplayed()

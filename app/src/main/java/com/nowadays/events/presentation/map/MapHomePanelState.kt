@@ -7,7 +7,7 @@ object MapHomePanelPolicy {
     private const val DRAG_THRESHOLD_PX = 48f
 
     fun onHandleTap(state: MapHomePanelState) = when (state) {
-        MapHomePanelState.CLOSED -> MapHomePanelState.PREVIEW
+        MapHomePanelState.CLOSED -> MapHomePanelState.EXPANDED
         MapHomePanelState.PREVIEW -> MapHomePanelState.EXPANDED
         MapHomePanelState.EXPANDED -> MapHomePanelState.PREVIEW
     }

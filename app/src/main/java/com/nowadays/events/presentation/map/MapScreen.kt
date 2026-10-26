@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DatePickerDialog
@@ -73,6 +75,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.input.pointer.pointerInput
@@ -101,6 +104,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MapScreen(
     onAddEvent: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     onOpenEvent: (com.nowadays.events.domain.model.Event) -> Unit = {},
     onNavigateBack: (() -> Unit)? = null,
     focusLatitude: Double? = null,
@@ -242,11 +246,21 @@ fun MapScreen(
                 onCalendarClick = { showCalendar = true },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 44.dp),
             )
-            IconButton(
-                onClick = { showSearch = !showSearch },
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 8.dp),
-            ) {
-                Icon(if (showSearch) Icons.Default.Close else Icons.Default.Search, contentDescription = "Rechercher et filtrer")
+            if (panelState != MapHomePanelState.EXPANDED) {
+                MapTopActionButton(
+                    onClick = { showSearch = !showSearch },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 8.dp)
+                        .testTag("map-search-action"),
+                    icon = if (showSearch) Icons.Default.Close else Icons.Default.Search,
+                    contentDescription = "Rechercher et filtrer",
+                )
+                MapTopActionButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 64.dp)
+                        .testTag("open-settings"),
+                    icon = Icons.Default.Settings,
+                    contentDescription = "Paramètres",
+                )
             }
             if (showSearch) {
                 SearchFilters(
@@ -347,6 +361,28 @@ fun MapScreen(
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapTopActionButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shadowElevation = 4.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
             }
         }
     }
